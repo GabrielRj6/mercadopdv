@@ -21,7 +21,7 @@ function AppContent() {
 
   function renderizarPagina() {
     switch (paginaAtual) {
-      case 'pdv': return <PDVPage />;
+      case 'pdv': return <PDVPage onNavegar={setPaginaAtual} />;
       case 'produtos': return <ProdutosPage />;
       case 'vendas': return <VendasPage />;
       case 'caixa': return <CaixaPage />;
@@ -29,7 +29,7 @@ function AppContent() {
       case 'operadores': return <OperadoresPage />;
       case 'backup': return <BackupPage />;
       case 'config': return <ConfiguracoesPage />;
-      default: return <PDVPage />;
+      default: return <PDVPage onNavegar={setPaginaAtual} />;
     }
   }
 

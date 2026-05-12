@@ -4,7 +4,7 @@ import { useToast } from '../contexts/ToastContext';
 import Modal from '../components/Modal';
 
 function formatarMoeda(valor) {
-  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  return (valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 export default function PDVPage(props) {
@@ -17,10 +17,11 @@ export default function PDVPage(props) {
   const [carrinho, setCarrinho] = useState([]);
   const [desconto, setDesconto] = useState(0);
   const [produtoPreview, setProdutoPreview] = useState(null);
-  const [modalQuantidade, setModalQuantidade] = useState(null);
   const [modalPeso, setModalPeso] = useState(null);
   const [modalPagamento, setModalPagamento] = useState(false);
   const [formaPagamento, setFormaPagamento] = useState('dinheiro');
+  const [valorRecebido, setValorRecebido] = useState('');
+  const [parcelas, setParcelas] = useState(1);
   const [produtosRapidos, setProdutosRapidos] = useState([]);
   const [buscaTexto, setBuscaTexto] = useState('');
 
@@ -30,8 +31,13 @@ export default function PDVPage(props) {
   }, []);
 
   async function carregarProdutosRapidos() {
-    const produtos = await window.api.produtos.listar({ limite: 30 });
-    setProdutosRapidos(produtos);
+    try {
+      const produtos = await window.api.produtos.listar({ limite: 30 });
+      setProdutosRapidos(produtos || []);
+    } catch (err) {
+      console.error('Erro ao carregar produtos:', err);
+      setProdutosRapidos([]);
+    }
   }
 
   function focarInput() {
@@ -41,14 +47,18 @@ export default function PDVPage(props) {
   const processarCodigo = useCallback(async (codigo) => {
     if (!codigo.trim()) return;
 
-    const produto = await window.api.produtos.buscarPorCodigo(codigo.trim());
-    if (!produto) {
-      toast('Produto não encontrado: ' + codigo, 'warning');
-      setProdutoPreview(null);
-      return;
-    }
+    try {
+      const produto = await window.api.produtos.buscarPorCodigo(codigo.trim());
+      if (!produto) {
+        toast('Produto não encontrado: ' + codigo, 'warning');
+        setProdutoPreview(null);
+        return;
+      }
 
-    adicionarAoCarrinho(produto);
+      adicionarAoCarrinho(produto);
+    } catch (err) {
+      toast('Erro ao buscar produto', 'error');
+    }
   }, [toast]);
 
   function handleInputChange(e) {
@@ -176,6 +186,17 @@ export default function PDVPage(props) {
     return carrinho.reduce((acc, item) => acc + item.subtotal, 0);
   }
 
+  function abrirPagamento() {
+    if (carrinho.length === 0) {
+      toast('Carrinho vazio', 'warning');
+      return;
+    }
+    setFormaPagamento('dinheiro');
+    setValorRecebido('');
+    setParcelas(1);
+    setModalPagamento(true);
+  }
+
   async function finalizarVenda() {
     if (carrinho.length === 0) {
       toast('Carrinho vazio', 'error');
@@ -213,13 +234,14 @@ export default function PDVPage(props) {
           });
         } catch (printErr) {
           console.warn('Erro ao imprimir cupom:', printErr);
-          toast('Venda salva, mas falhou ao imprimir', 'warning');
         }
 
         setCarrinho([]);
         setDesconto(0);
         setModalPagamento(false);
         setFormaPagamento('dinheiro');
+        setValorRecebido('');
+        setParcelas(1);
         carregarProdutosRapidos();
         focarInput();
       } else {
@@ -235,8 +257,12 @@ export default function PDVPage(props) {
       carregarProdutosRapidos();
       return;
     }
-    const produtos = await window.api.produtos.listar({ busca: buscaTexto });
-    setProdutosRapidos(produtos);
+    try {
+      const produtos = await window.api.produtos.listar({ busca: buscaTexto });
+      setProdutosRapidos(produtos || []);
+    } catch (err) {
+      toast('Erro ao buscar produtos', 'error');
+    }
   }
 
   return (
@@ -254,11 +280,11 @@ export default function PDVPage(props) {
             autoFocus
           />
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-secondary" onClick={() => props.onNavegar('produtos')} title="Menu Administrativo">
+            <button className="btn btn-secondary" onClick={() => props.onNavegar && props.onNavegar('produtos')} title="Menu Administrativo">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
               Menu
             </button>
-            <button className="btn btn-primary btn-lg" onClick={() => setModalPagamento(true)} disabled={carrinho.length === 0}>
+            <button className="btn btn-primary btn-lg" onClick={abrirPagamento} disabled={carrinho.length === 0}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
               Pagamento
             </button>
@@ -422,16 +448,16 @@ export default function PDVPage(props) {
       )}
 
       {modalPagamento && (
-        <Modal titulo="Finalizar Venda" onFechar={() => setModalPagamento(false)}>
+        <Modal titulo="Finalizar Venda" onFechar={() => setModalPagamento(false)} largura="500px">
           <div className="modal-body">
-            <div style={{ textAlign: 'center', marginBottom: 8 }}>
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Total a Pagar</div>
-              <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--accent-success)' }}>
+              <div style={{ fontSize: 42, fontWeight: 900, color: 'var(--accent-success)' }}>
                 {formatarMoeda(calcularTotal())}
               </div>
             </div>
 
-            <div className="payment-options">
+            <div className="payment-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
               {[
                 { id: 'dinheiro', icone: '💵', label: 'Dinheiro' },
                 { id: 'pix', icone: '📱', label: 'PIX' },
@@ -441,18 +467,78 @@ export default function PDVPage(props) {
                 <div
                   key={forma.id}
                   className={`payment-option ${formaPagamento === forma.id ? 'selected' : ''}`}
-                  onClick={() => setFormaPagamento(forma.id)}
+                  onClick={() => {
+                    setFormaPagamento(forma.id);
+                    setValorRecebido('');
+                    setParcelas(1);
+                  }}
+                  style={{ 
+                    padding: 12, 
+                    borderRadius: 12, 
+                    border: '2px solid var(--border-color)', 
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    background: formaPagamento === forma.id ? 'var(--accent-primary-transparent, rgba(108, 92, 231, 0.1))' : 'transparent',
+                    borderColor: formaPagamento === forma.id ? 'var(--accent-primary)' : 'var(--border-color)'
+                  }}
                 >
-                  <div className="payment-option-icon">{forma.icone}</div>
-                  <div className="payment-option-label">{forma.label}</div>
+                  <div style={{ fontSize: 24, marginBottom: 4 }}>{forma.icone}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700 }}>{forma.label}</div>
                 </div>
               ))}
             </div>
+
+            {formaPagamento === 'dinheiro' && (
+              <div className="card" style={{ padding: 15, background: 'var(--bg-secondary)' }}>
+                <div className="input-group">
+                  <label>Valor Recebido (R$)</label>
+                  <input 
+                    type="number" 
+                    className="input btn-lg" 
+                    style={{ fontSize: 24, fontWeight: 700, textAlign: 'center' }}
+                    value={valorRecebido}
+                    onChange={(e) => setValorRecebido(e.target.value)}
+                    placeholder="0,00"
+                    autoFocus
+                  />
+                </div>
+                {valorRecebido && parseFloat(valorRecebido) > calcularTotal() && (
+                  <div style={{ marginTop: 15, textAlign: 'center' }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Troco a Devolver</div>
+                    <div style={{ fontSize: 32, fontWeight: 900, color: 'var(--accent-warning)' }}>
+                      {formatarMoeda(parseFloat(valorRecebido) - calcularTotal())}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {formaPagamento === 'credito' && (
+              <div className="card" style={{ padding: 15, background: 'var(--bg-secondary)' }}>
+                <div className="input-group">
+                  <label>Número de Parcelas</label>
+                  <select 
+                    className="input" 
+                    value={parcelas} 
+                    onChange={(e) => setParcelas(parseInt(e.target.value))}
+                  >
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                      <option key={n} value={n}>{n}x {n > 1 ? `de ${formatarMoeda(calcularTotal() / n)}` : '(À vista)'}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="modal-footer">
-            <button className="btn btn-secondary" onClick={() => setModalPagamento(false)}>Cancelar</button>
-            <button className="btn btn-success btn-lg" onClick={finalizarVenda}>
-              ✓ Finalizar Venda
+          <div className="modal-footer" style={{ marginTop: 10 }}>
+            <button className="btn btn-secondary" onClick={() => setModalPagamento(false)}>Voltar</button>
+            <button 
+              className="btn btn-success btn-lg" 
+              onClick={finalizarVenda}
+              disabled={formaPagamento === 'dinheiro' && (!valorRecebido || parseFloat(valorRecebido) < calcularTotal())}
+              style={{ flex: 1 }}
+            >
+              ✓ Confirmar e Finalizar
             </button>
           </div>
         </Modal>

@@ -9,46 +9,76 @@ export default function ConfiguracoesPage() {
     balancaBaud: '9600'
   });
   const [hwid, setHwid] = useState('');
+  const [versao, setVersao] = useState('...');
+  const [checandoUpdate, setChecandoUpdate] = useState(false);
 
   const [nomeMercado, setNomeMercado] = useState('MERCADO PDV');
   const [usaBalanca, setUsaBalanca] = useState(false);
 
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
   async function carregarDados() {
-    const p = await window.api.balanca.listarPortas();
-    setPortas(p);
+    try {
+      const p = await window.api.balanca.listarPortas();
+      setPortas(p || []);
+    } catch (err) {
+      console.warn('Não foi possível listar portas:', err);
+      setPortas([]);
+    }
     
     // Tenta carregar configs salvas no localStorage (simples)
-    const saved = localStorage.getItem('config_hardware');
-    const systemSettings = localStorage.getItem('config_sistema');
-    
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setConfig(parsed);
-      setUsaBalanca(parsed.usaBalanca || false);
-      if (parsed.usaBalanca) {
-        window.api.balanca.configurar({ path: parsed.balancaPorta, baudRate: parseInt(parsed.balancaBaud) });
+    try {
+      const saved = localStorage.getItem('config_hardware');
+      const systemSettings = localStorage.getItem('config_sistema');
+      
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setConfig(parsed);
+        setUsaBalanca(parsed.usaBalanca || false);
+        if (parsed.usaBalanca && parsed.balancaPorta) {
+          window.api.balanca.configurar({ path: parsed.balancaPorta, baudRate: parseInt(parsed.balancaBaud) });
+        }
       }
+
+      if (systemSettings) {
+        const parsed = JSON.parse(systemSettings);
+        setNomeMercado(parsed.nomeMercado || 'MERCADO PDV');
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar configurações locais:', err);
     }
 
-    if (systemSettings) {
-      const parsed = JSON.parse(systemSettings);
-      setNomeMercado(parsed.nomeMercado || 'MERCADO PDV');
+    try {
+      const h = await window.api.licenca.hwid();
+      setHwid(h || '');
+    } catch (err) {
+      setHwid('Não disponível');
     }
 
-    const h = await window.api.licenca.hwid();
-    setHwid(h);
+    try {
+      const v = await window.api.invoke('app:versao');
+      setVersao(v || '?.?.?');
+    } catch (err) {
+      setVersao('?.?.?');
+    }
   }
 
   async function salvar() {
-    const hardwareConfig = { ...config, usaBalanca };
-    localStorage.setItem('config_hardware', JSON.stringify(hardwareConfig));
-    localStorage.setItem('config_sistema', JSON.stringify({ nomeMercado }));
-    
-    if (usaBalanca) {
-      await window.api.balanca.configurar({ path: config.balancaPorta, baudRate: parseInt(config.balancaBaud) });
+    try {
+      const hardwareConfig = { ...config, usaBalanca };
+      localStorage.setItem('config_hardware', JSON.stringify(hardwareConfig));
+      localStorage.setItem('config_sistema', JSON.stringify({ nomeMercado }));
+      
+      if (usaBalanca && config.balancaPorta) {
+        await window.api.balanca.configurar({ path: config.balancaPorta, baudRate: parseInt(config.balancaBaud) });
+      }
+      
+      toast('Configurações aplicadas e salvas', 'success');
+    } catch (err) {
+      toast('Erro ao salvar configurações', 'error');
     }
-    
-    toast('Configurações aplicadas e salvas', 'success');
   }
 
   return (
@@ -164,9 +194,13 @@ export default function ConfiguracoesPage() {
                 style={{ marginTop: 16, width: '100%' }}
                 onClick={async () => {
                   setChecandoUpdate(true);
-                  await window.api.invoke('updater:verificar');
+                  try {
+                    await window.api.invoke('updater:verificar');
+                    toast('Verificando por novas versões...', 'info');
+                  } catch (err) {
+                    toast('Erro ao verificar atualizações', 'error');
+                  }
                   setTimeout(() => setChecandoUpdate(false), 2000);
-                  toast('Verificando por novas versões...', 'info');
                 }}
                 disabled={checandoUpdate}
               >

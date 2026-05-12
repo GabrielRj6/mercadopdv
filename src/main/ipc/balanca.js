@@ -1,31 +1,43 @@
-const { SerialPort } = require('serialport');
-const { ReadlineParser } = require('@serialport/parser-readline');
+let SerialPort = null;
+let ReadlineParser = null;
 
-let portoBalança = null;
+try {
+  SerialPort = require('serialport').SerialPort;
+  ReadlineParser = require('@serialport/parser-readline').ReadlineParser;
+} catch (err) {
+  console.warn('Módulo serialport não disponível - balança desabilitada:', err.message);
+}
+
+let portoBalanca = null;
 let ultimoPeso = 0;
 
 function inicializarBalanca(config = { path: 'COM1', baudRate: 9600 }) {
-  if (portoBalança) {
-    portoBalança.close();
+  if (!SerialPort) {
+    console.warn('SerialPort não disponível');
+    return;
+  }
+
+  if (portoBalanca) {
+    try { portoBalanca.close(); } catch (e) { /* ignore */ }
   }
 
   try {
-    portoBalança = new SerialPort({
+    portoBalanca = new SerialPort({
       path: config.path,
       baudRate: config.baudRate,
       autoOpen: true,
     });
 
-    const parser = portoBalança.pipe(new ReadlineParser({ delimiter: '\r\n' }));
+    const parser = portoBalanca.pipe(new ReadlineParser({ delimiter: '\r\n' }));
 
     parser.on('data', (data) => {
-      const match = data.match(/(\d+\.\d+)/);
+      const match = data.match(/(\d+\.?\d*)/);
       if (match) {
         ultimoPeso = parseFloat(match[1]);
       }
     });
 
-    portoBalança.on('error', (err) => {
+    portoBalanca.on('error', (err) => {
       console.error('Erro na Balança:', err.message);
     });
   } catch (err) {
@@ -39,12 +51,27 @@ function registrarHandlersBalanca(ipcMain) {
   });
 
   ipcMain.handle('balanca:configurar', (_event, config) => {
-    inicializarBalanca(config);
-    return { ok: true };
+    if (!SerialPort) {
+      return { ok: false, erro: 'Módulo serialport não disponível' };
+    }
+    try {
+      inicializarBalanca(config);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, erro: err.message };
+    }
   });
 
   ipcMain.handle('balanca:listarPortas', async () => {
-    return await SerialPort.list();
+    if (!SerialPort) {
+      return [];
+    }
+    try {
+      return await SerialPort.list();
+    } catch (err) {
+      console.error('Erro ao listar portas:', err);
+      return [];
+    }
   });
 }
 

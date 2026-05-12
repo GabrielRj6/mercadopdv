@@ -3,6 +3,7 @@ const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const db = require('./database');
 
+// Importação de Handlers
 const { registrarHandlersBackup } = require('./ipc/backup');
 const { registrarHandlersBalanca } = require('./ipc/balanca');
 const { registrarHandlersCaixa } = require('./ipc/caixa');
@@ -20,94 +21,100 @@ autoUpdater.autoDownload = true;
 autoUpdater.allowPrerelease = false;
 
 function createWindow() {
-  Menu.setApplicationMenu(null); // Remove o menu 'File, Edit...'
+  Menu.setApplicationMenu(null);
 
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    frame: false, // REMOVE A BARRA PADRÃO DO WINDOWS
+    frame: false,
     backgroundColor: '#0f0f13',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
+    show: false, // Inicia oculta para evitar "flashing"
     icon: path.join(__dirname, '../../assets/icon.png')
   });
 
   const indexPath = path.join(__dirname, '../../dist/index.html');
-  mainWindow.loadFile(indexPath).catch(err => {
-    console.error("Erro ao carregar:", err);
-  });
+  mainWindow.loadFile(indexPath).catch(err => console.error("Erro ao carregar HTML:", err));
 
-  // DEVTOOLS DESATIVADO
-  // mainWindow.webContents.openDevTools();
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
 
-const registrarTodosHandlers = () => {
-  registrarHandlersBackup(ipcMain, db);
-  registrarHandlersProdutos(ipcMain, db);
-  registrarHandlersVendas(ipcMain, db);
-  registrarHandlersCaixa(ipcMain, db);
-  registrarHandlersOperadores(ipcMain, db);
-  registrarHandlersBackup(ipcMain, db);
-  registrarHandlersLicenca(ipcMain, db);
-  registrarHandlersBalanca(ipcMain, db);
-  registrarHandlersImpressao(ipcMain, db);
-
-  // Handlers do Updater
-  ipcMain.handle('app:versao', () => app.getVersion());
-  ipcMain.handle('updater:verificar', () => {
-    autoUpdater.checkForUpdatesAndNotify();
-    return { ok: true };
-  });
-
-  autoUpdater.on('update-available', () => {
-    mainWindow.webContents.send('updater:status', 'Uma nova atualização esta disponível. Baixando...');
-  });
-
-  autoUpdater.on('update-downloaded', () => {
-    mainWindow.webContents.send('updater:status', 'Atualização baixada. Reinicie para instalar.');
-    // Se quiser forçar a instalação: autoUpdater.quitAndInstall();
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.error('Erro no updater:', err);
-  });
-};
-
-  app.whenReady().then(() => {
-  db.inicializar();
-  registrarTodosHandlers();
-  
-  // Handlers para controle da janela (Minimize, Maximize, Close)
-  ipcMain.on('janela:minimizar', () => {
-    if (mainWindow) mainWindow.minimize();
-  });
-
-  ipcMain.on('janela:maximizar', () => {
-    if (mainWindow) {
-      if (mainWindow.isMaximized()) {
-        mainWindow.unmaximize();
-      } else {
-        mainWindow.maximize();
-      }
+function registrarTodosHandlers() {
+  try {
+    registrarHandlersBackup(ipcMain, db);
+    registrarHandlersProdutos(ipcMain, db);
+    registrarHandlersVendas(ipcMain, db);
+    registrarHandlersCaixa(ipcMain, db);
+    registrarHandlersOperadores(ipcMain, db);
+    registrarHandlersLicenca(ipcMain, db);
+    registrarHandlersRelatorios(ipcMain, db);
+    
+    // Handlers sem dependência de DB
+    try {
+      registrarHandlersBalanca(ipcMain);
+    } catch (err) {
+      console.warn('Balança não disponível:', err.message);
     }
-  });
+    registrarHandlersImpressao(ipcMain, db);
 
-  ipcMain.on('janela:fechar', () => {
-    if (mainWindow) mainWindow.close();
-  });
+    // Handlers do Updater
+    ipcMain.handle('app:versao', () => app.getVersion());
+    ipcMain.handle('updater:verificar', () => {
+      autoUpdater.checkForUpdatesAndNotify();
+      return { ok: true };
+    });
 
-  createWindow();
+    autoUpdater.on('update-available', () => {
+      if (mainWindow) mainWindow.webContents.send('updater:status', 'Uma nova atualização está disponível. Baixando...');
+    });
+
+    autoUpdater.on('update-downloaded', () => {
+      if (mainWindow) mainWindow.webContents.send('updater:status', 'Atualização baixada. Reinicie para instalar.');
+    });
+
+    autoUpdater.on('error', (err) => console.error('Erro no updater:', err));
+
+  } catch (err) {
+    console.error("Erro ao registrar handlers:", err);
+  }
+}
+
+app.whenReady().then(() => {
+  try {
+    db.inicializar();
+    registrarTodosHandlers();
+    
+    ipcMain.on('janela:minimizar', () => mainWindow?.minimize());
+    ipcMain.on('janela:maximizar', () => {
+      if (!mainWindow) return;
+      mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
+    });
+    ipcMain.on('janela:fechar', () => mainWindow?.close());
+
+    createWindow();
+  } catch (err) {
+    console.error("Falha crítica no startup:", err);
+    createWindow(); // Tenta abrir a janela mesmo assim
+  }
 });
 
 app.on('window-all-closed', () => {
   db.fechar();
   if (process.platform !== 'darwin') app.quit();
+});
+
+// Tratamento de erros não capturados para evitar que o app morra silenciosamente
+process.on('uncaughtException', (err) => {
+  console.error('Excessão não capturada:', err);
 });
 

@@ -12,6 +12,7 @@
 
   --accent-primary: #6c5ce7;
   --accent-primary-hover: #7d6ff0;
+  --accent-primary-transparent: rgba(108, 92, 231, 0.1);
   --accent-secondary: #00cec9;
   --accent-success: #00b894;
   --accent-warning: #fdcb6e;
@@ -957,6 +958,7 @@ select.input {
   font-weight: 900;
   background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 8px;
   letter-spacing: -0.5px;
