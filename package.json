@@ -1,0 +1,56 @@
+{
+    "name": "mercadopdv",
+    "version": "1.1.2",
+    "main": "src/main/main.js",
+    "scripts": {
+        "build": "vite build",
+        "dist": "npm run build && electron-builder"
+    },
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/GabrielRj6/mercadopdv.git"
+    },
+    "build": {
+      "appId": "com.mercadopdv.app",
+      "productName": "MercadoPDV",
+      "publish": [
+        {
+          "provider": "github",
+          "owner": "GabrielRj6",
+          "repo": "mercadopdv"
+        }
+      ],
+        "directories": {
+            "output": "release"
+        },
+        "win": {
+            "target": "nsis",
+            "icon": "assets/icon.png"
+        },
+        "files": [
+            "src/main/**/*",
+            "dist/**/*",
+            "assets/**/*",
+            "node_modules/**/*",
+            "package.json"
+        ]
+    },
+    "dependencies": {
+        "better-sqlite3": "^11.0.0",
+        "crypto-js": "^4.2.0",
+        "electron-updater": "^6.8.3",
+        "escpos": "^3.0.0-alpha.6",
+        "escpos-usb": "^3.0.0-alpha.4",
+        "node-machine-id": "^1.1.12",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "react-router-dom": "^6.21.0",
+        "serialport": "^12.0.0"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "^4.2.0",
+        "electron": "^28.2.0",
+        "electron-builder": "^24.9.1",
+        "vite": "^5.0.0"
+    }
+}
