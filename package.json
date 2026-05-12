@@ -4,7 +4,8 @@
     "main": "src/main/main.js",
     "scripts": {
         "build": "vite build",
-        "dist": "npm run build && electron-builder"
+        "dist": "npm run build && electron-builder",
+        "publish": "npm run build && electron-builder --publish always"
     },
     "repository": {
       "type": "git",
