@@ -17,6 +17,7 @@ export default function CaixaPage() {
   const toast = useToast();
   const [status, setStatus] = useState(null);
   const [movimentos, setMovimentos] = useState([]);
+  const [modalAbrir, setModalAbrir] = useState(false);
   const [modalSangria, setModalSangria] = useState(false);
   const [modalSuprimento, setModalSuprimento] = useState(false);
   const [valor, setValor] = useState('');
@@ -37,9 +38,12 @@ export default function CaixaPage() {
 
   async function abrirCaixa() {
     try {
-      const resultado = await window.api.caixa.abrir(operador.id);
+      const valorAbertura = parseFloat(valor) || 0;
+      const resultado = await window.api.caixa.abrir({ operadorId: operador.id, valorInicial: valorAbertura });
       if (resultado && resultado.ok) {
-        toast('Caixa aberto', 'success');
+        toast('Caixa aberto com sucesso', 'success');
+        setModalAbrir(false);
+        setValor('');
         carregarDados();
       } else {
         toast(resultado?.erro || 'Erro ao abrir caixa', 'error');
@@ -135,12 +139,12 @@ export default function CaixaPage() {
         <div className="page-actions">
           {status?.aberto ? (
             <>
-              <button className="btn btn-secondary" onClick={() => setModalSuprimento(true)}>📥 Suprimento</button>
-              <button className="btn btn-secondary" onClick={() => setModalSangria(true)}>📤 Sangria</button>
+              <button className="btn btn-secondary" onClick={() => { setValor(''); setDescricao(''); setModalSuprimento(true); }}>📥 Suprimento</button>
+              <button className="btn btn-secondary" onClick={() => { setValor(''); setDescricao(''); setModalSangria(true); }}>📤 Sangria</button>
               <button className="btn btn-danger" onClick={fecharCaixa}>Fechar Caixa</button>
             </>
           ) : (
-            <button className="btn btn-success" onClick={abrirCaixa}>Abrir Caixa</button>
+            <button className="btn btn-success" onClick={() => { setValor('0'); setModalAbrir(true); }}>Abrir Caixa</button>
           )}
         </div>
       </div>
@@ -148,33 +152,40 @@ export default function CaixaPage() {
       {status?.aberto && (
         <div className="stats-grid">
           <div className="stat-card">
+            <div className="stat-icon purple">🏁</div>
+            <div className="stat-info">
+              <div className="stat-value">{formatarMoeda(status.totalAbertura)}</div>
+              <div className="stat-label">Fundo de Abertura</div>
+            </div>
+          </div>
+          <div className="stat-card">
             <div className="stat-icon green">💰</div>
             <div className="stat-info">
               <div className="stat-value">{formatarMoeda(status.totalVendas)}</div>
-              <div className="stat-label">Total em Vendas</div>
+              <div className="stat-label">Vendas do Dia</div>
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-icon red">📤</div>
             <div className="stat-info">
               <div className="stat-value">{formatarMoeda(status.totalSangrias)}</div>
-              <div className="stat-label">Sangrias</div>
+              <div className="stat-label">Total Sangrias</div>
             </div>
           </div>
           <div className="stat-card">
             <div className="stat-icon teal">📥</div>
             <div className="stat-info">
               <div className="stat-value">{formatarMoeda(status.totalSuprimentos)}</div>
-              <div className="stat-label">Suprimentos</div>
+              <div className="stat-label">Total Suprimentos</div>
             </div>
           </div>
-          <div className="stat-card">
-            <div className="stat-icon purple">💵</div>
+          <div className="stat-card" style={{ gridColumn: 'span 2' }}>
+            <div className="stat-icon gold">💵</div>
             <div className="stat-info">
-              <div className="stat-value" style={{ color: status.saldo >= 0 ? 'var(--accent-success)' : 'var(--accent-danger)' }}>
+              <div className="stat-value" style={{ fontSize: 32, color: status.saldo >= 0 ? 'var(--accent-success)' : 'var(--accent-danger)' }}>
                 {formatarMoeda(status.saldo)}
               </div>
-              <div className="stat-label">Saldo Atual</div>
+              <div className="stat-label">Saldo em Caixa (Total Geral)</div>
             </div>
           </div>
         </div>
@@ -214,6 +225,33 @@ export default function CaixaPage() {
           </table>
         </div>
       </div>
+
+      {modalAbrir && (
+        <Modal titulo="Abrir Caixa - Trocado Inicial" onFechar={() => setModalAbrir(false)}>
+          <div className="modal-body">
+            <p style={{ marginBottom: 16, fontSize: 13, color: 'var(--text-secondary)' }}>
+              Informe o valor que está na gaveta para iniciar as operações (Fundo de Reserva/Troco).
+            </p>
+            <div className="input-group">
+              <label>Valor Inicial (R$)</label>
+              <input 
+                type="number" 
+                className="input" 
+                value={valor} 
+                onChange={(e) => setValor(e.target.value)} 
+                min="0" 
+                step="0.01" 
+                autoFocus 
+                style={{ fontSize: 24, fontWeight: 700, textAlign: 'center' }}
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={() => setModalAbrir(false)}>Cancelar</button>
+            <button className="btn btn-success" onClick={abrirCaixa}>Confirmar e Abrir</button>
+          </div>
+        </Modal>
+      )}
 
       {modalSangria && (
         <Modal titulo="Registrar Sangria" onFechar={() => setModalSangria(false)}>

@@ -1,11 +1,11 @@
 function registrarHandlersCaixa(ipcMain, db) {
-  ipcMain.handle('caixa:abrir', (_event, operadorId) => {
+  ipcMain.handle('caixa:abrir', (_event, { operadorId, valorInicial }) => {
     try {
       const banco = db.obterDb();
-      const ultimoMov = banco.prepare("SELECT tipo FROM caixa_movimentos ORDER BY id DESC LIMIT 1").get();
-      if (ultimoMov && ultimoMov.tipo === 'abertura') return { ok: false, erro: 'Caixa já está aberto' };
+      const status = obterStatusCaixa(banco);
+      if (status.aberto) return { ok: false, erro: 'Caixa já está aberto' };
 
-      banco.prepare("INSERT INTO caixa_movimentos (tipo, valor, descricao, operador_id) VALUES ('abertura', 0, 'Abertura de caixa', ?)").run(operadorId);
+      banco.prepare("INSERT INTO caixa_movimentos (tipo, valor, descricao, operador_id) VALUES ('abertura', ?, 'Abertura de caixa', ?)").run(valorInicial || 0, operadorId);
       return { ok: true };
     } catch (err) {
       return { ok: false, erro: err.message };
@@ -99,18 +99,21 @@ function calcularResumoCaixa(banco, aberturaId) {
   let totalVendas = 0;
   let totalSangrias = 0;
   let totalSuprimentos = 0;
+  let totalAbertura = 0;
 
   for (const mov of movimentos) {
     if (mov.tipo === 'venda') totalVendas += mov.valor;
     if (mov.tipo === 'sangria') totalSangrias += Math.abs(mov.valor);
     if (mov.tipo === 'suprimento') totalSuprimentos += mov.valor;
+    if (mov.tipo === 'abertura') totalAbertura += mov.valor;
   }
 
   return {
     totalVendas,
     totalSangrias,
     totalSuprimentos,
-    saldo: totalVendas - totalSangrias + totalSuprimentos,
+    totalAbertura,
+    saldo: totalAbertura + totalVendas - totalSangrias + totalSuprimentos,
     quantidadeMovimentos: movimentos.length,
   };
 }

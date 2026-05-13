@@ -126,25 +126,58 @@ export default function RelatoriosPage() {
           <h1 className="page-title">Relatórios</h1>
           <p className="page-subtitle">Análise de vendas e desempenho</p>
         </div>
-        <div className="page-actions">
+        <div className="page-actions" style={{ gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => {
+            const hoje = new Date().toISOString().split('T')[0];
+            setDataInicio(hoje);
+            setDataFim(hoje);
+          }}>Hoje</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => {
+            const ontem = new Date();
+            ontem.setDate(ontem.getDate() - 1);
+            const dataStr = ontem.toISOString().split('T')[0];
+            setDataInicio(dataStr);
+            setDataFim(dataStr);
+          }}>Ontem</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => {
+            const hoje = new Date();
+            const inicio = new Date();
+            inicio.setDate(hoje.getDate() - 7);
+            setDataInicio(inicio.toISOString().split('T')[0]);
+            setDataFim(hoje.toISOString().split('T')[0]);
+          }}>7 dias</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => {
+            const hoje = new Date();
+            const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            setDataInicio(inicio.toISOString().split('T')[0]);
+            setDataFim(hoje.toISOString().split('T')[0]);
+          }}>Mês Atual</button>
+          <div style={{ width: 1, height: 24, background: 'var(--border-color)', margin: '0 8px' }}></div>
           <input type="date" className="input" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
           <input type="date" className="input" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-        <div className="stat-card" style={{ flex: 1 }}>
+      <div className="stats-grid" style={{ marginBottom: 20 }}>
+        <div className="stat-card">
           <div className="stat-icon green">📊</div>
           <div className="stat-info">
             <div className="stat-value">{formatarMoeda(totalGeral)}</div>
-            <div className="stat-label">Total no Período</div>
+            <div className="stat-label">Faturamento Total</div>
           </div>
         </div>
-        <div className="stat-card" style={{ flex: 1 }}>
+        <div className="stat-card">
           <div className="stat-icon purple">📋</div>
           <div className="stat-info">
             <div className="stat-value">{dados.length}</div>
-            <div className="stat-label">Registros</div>
+            <div className="stat-label">Entradas/Registros</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon teal">📉</div>
+          <div className="stat-info">
+            <div className="stat-value">{formatarMoeda(dados.length > 0 ? totalGeral / dados.length : 0)}</div>
+            <div className="stat-label">Ticket Médio</div>
           </div>
         </div>
       </div>
