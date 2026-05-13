@@ -16,6 +16,7 @@ export default function PDVPage(props) {
   const [codigoInput, setCodigoInput] = useState('');
   const [carrinho, setCarrinho] = useState([]);
   const [desconto, setDesconto] = useState(0);
+  const [tipoDesconto, setTipoDesconto] = useState('RS'); // 'RS' ou '%'
   const [produtoPreview, setProdutoPreview] = useState(null);
   const [modalPeso, setModalPeso] = useState(null);
   const [modalPagamento, setModalPagamento] = useState(false);
@@ -178,8 +179,19 @@ export default function PDVPage(props) {
   }
 
   function calcularTotal() {
-    const subtotal = carrinho.reduce((acc, item) => acc + item.subtotal, 0);
+    const subtotal = calcularSubtotal();
+    if (tipoDesconto === '%') {
+      return Math.max(0, subtotal - (subtotal * (desconto / 100)));
+    }
     return Math.max(0, subtotal - desconto);
+  }
+
+  function calcularValorDesconto() {
+    const subtotal = calcularSubtotal();
+    if (tipoDesconto === '%') {
+      return subtotal * (desconto / 100);
+    }
+    return desconto;
   }
 
   function calcularSubtotal() {
@@ -394,15 +406,26 @@ export default function PDVPage(props) {
           </div>
           <div className="pdv-total-row">
             <span className="pdv-total-label">Desconto</span>
-            <input
-              type="number"
-              className="input"
-              style={{ width: 100, padding: '4px 8px', textAlign: 'right', fontSize: 13 }}
-              value={desconto || ''}
-              onChange={(e) => setDesconto(parseFloat(e.target.value) || 0)}
-              min="0"
-              step="0.01"
-            />
+            <div style={{ display: 'flex', gap: 4 }}>
+              <select 
+                className="input" 
+                style={{ width: 50, padding: '4px', fontSize: 12 }} 
+                value={tipoDesconto} 
+                onChange={(e) => setTipoDesconto(e.target.value)}
+              >
+                <option value="RS">R$</option>
+                <option value="%">%</option>
+              </select>
+              <input
+                type="number"
+                className="input"
+                style={{ width: 70, padding: '4px 8px', textAlign: 'right', fontSize: 13 }}
+                value={desconto || ''}
+                onChange={(e) => setDesconto(parseFloat(e.target.value) || 0)}
+                min="0"
+                step="0.01"
+              />
+            </div>
           </div>
           <div className="pdv-grand-total">
             <span className="pdv-total-label">Total</span>
@@ -455,6 +478,11 @@ export default function PDVPage(props) {
               <div style={{ fontSize: 42, fontWeight: 900, color: 'var(--accent-success)' }}>
                 {formatarMoeda(calcularTotal())}
               </div>
+              {desconto > 0 && (
+                <div style={{ fontSize: 12, color: 'var(--accent-warning)', fontWeight: 600 }}>
+                  Economia de {formatarMoeda(calcularValorDesconto())} ({tipoDesconto === '%' ? `${desconto}%` : 'Valor Fixo'})
+                </div>
+              )}
             </div>
 
             <div className="payment-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
