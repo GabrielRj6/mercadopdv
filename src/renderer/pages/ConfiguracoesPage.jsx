@@ -21,9 +21,9 @@ export default function ConfiguracoesPage() {
     const cleanup = window.api.on('updater:status', (status) => {
       setChecandoUpdate(status);
       toast(status, 'info');
-      // Timeout se for a mensagem de conclusão
+      // Se for a mensagem de conclusão, aguarda um pouco e reinicia
       if (status.includes('reinicie') || status.includes('Reinicie')) {
-        setTimeout(() => window.api.invoke('janela:fechar'), 5000); // Opção para fechar e aplicar auto (opcional)
+        setTimeout(() => window.api.invoke('updater:instalar'), 3000);
       }
     });
 

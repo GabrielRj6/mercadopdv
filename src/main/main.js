@@ -73,6 +73,10 @@ function registrarTodosHandlers() {
       autoUpdater.checkForUpdatesAndNotify();
       return { ok: true };
     });
+    ipcMain.handle('updater:instalar', () => {
+      autoUpdater.quitAndInstall();
+      return { ok: true };
+    });
 
     autoUpdater.on('update-available', () => {
       if (mainWindow) mainWindow.webContents.send('updater:status', 'Uma nova atualização está disponível. Baixando...');
