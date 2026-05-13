@@ -20,10 +20,24 @@ function buscarNaCosmosApi(codigo) {
         if (res.statusCode === 200) {
           try {
             const json = JSON.parse(data);
+            let catOriginal = json.ncm?.full_description || 'Geral';
+            // Mapeamento simples para categorias do mercado
+            let categoriaFinal = 'Geral';
+            const desc = catOriginal.toLowerCase();
+            if (desc.includes('bebida') || desc.includes('agua') || desc.includes('suco')) categoriaFinal = 'Bebidas';
+            else if (desc.includes('carne') || desc.includes('frango')) categoriaFinal = 'Açougue';
+            else if (desc.includes('limpeza')) categoriaFinal = 'Limpeza';
+            else if (desc.includes('higiene') || desc.includes('shampoo')) categoriaFinal = 'Higiene';
+            else if (desc.includes('leite') || desc.includes('queijo')) categoriaFinal = 'Laticínios';
+            else if (desc.includes('pão') || desc.includes('bolo')) categoriaFinal = 'Padaria';
+            else if (desc.includes('ração') || desc.includes('animal')) categoriaFinal = 'Pet Shop';
+            else if (desc.includes('congelado')) categoriaFinal = 'Congelados';
+            else categoriaFinal = 'Mercearia';
+
             resolve({
               nome: json.description || '',
               foto: json.thumbnail || '',
-              categoria: json.ncm?.full_description || 'Geral',
+              categoria: categoriaFinal,
             });
           } catch {
             resolve(null);
