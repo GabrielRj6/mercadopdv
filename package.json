@@ -1,6 +1,6 @@
 {
     "name": "mercadopdv",
-    "version": "1.1.9",
+    "version": "1.2.0",
     "main": "src/main/main.js",
     "scripts": {
         "build": "vite build",
