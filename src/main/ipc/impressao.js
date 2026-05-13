@@ -56,41 +56,45 @@ function registrarHandlersImpressao(ipcMain, db) {
             }
 
             try {
-              printer
-                .font('a').align('ct').style('bu').size(1, 1).text(nomeMercado)
-                .size(0, 0).style('normal').text('NAO E DOCUMENTO FISCAL')
-                .text('--------------------------------')
-                .align('lt').text(`Venda: #${venda.id}`)
-                .text(`Data: ${new Date().toLocaleString('pt-BR')}`)
-                .text(`Operador: ${venda.operador_nome || 'N/A'}`)
-                .text(`Pagamento: ${venda.forma_pagamento || 'N/A'}`)
-                .text('--------------------------------')
-                .tableCustom([
-                  { text: "Item", align: "LEFT", width: 0.4 },
-                  { text: "Qtd", align: "CENTER", width: 0.2 },
-                  { text: "Un", align: "RIGHT", width: 0.2 },
-                  { text: "Total", align: "RIGHT", width: 0.2 }
-                ]);
+              for (let via = 1; via <= 2; via++) {
+                printer
+                  .font('a').align('ct').style('bu').size(1, 1).text(nomeMercado)
+                  .size(0, 0).style('normal').text('NAO E DOCUMENTO FISCAL')
+                  .text(`--- VIA DO ${via === 1 ? 'ESTABELECIMENTO' : 'CLIENTE'} ---`)
+                  .text('--------------------------------')
+                  .align('lt').text(`Venda: #${venda.id}`)
+                  .text(`Data: ${new Date().toLocaleString('pt-BR')}`)
+                  .text(`Operador: ${venda.operador_nome || 'N/A'}`)
+                  .text(`Pagamento: ${venda.forma_pagamento || 'N/A'}`)
+                  .text('--------------------------------')
+                  .tableCustom([
+                    { text: "Item", align: "LEFT", width: 0.4 },
+                    { text: "Qtd", align: "CENTER", width: 0.2 },
+                    { text: "Un", align: "RIGHT", width: 0.2 },
+                    { text: "Total", align: "RIGHT", width: 0.2 }
+                  ]);
 
-              itens.forEach(item => {
-                const nome = (item.produto_nome || 'Item').substring(0, 15);
-                const qtdStr = item.peso_kg > 0 ? item.peso_kg.toFixed(3) : item.qtd.toString();
-                printer.tableCustom([
-                  { text: nome, align: "LEFT", width: 0.4 },
-                  { text: qtdStr, align: "CENTER", width: 0.2 },
-                  { text: item.preco_unitario.toFixed(2), align: "RIGHT", width: 0.2 },
-                  { text: item.subtotal.toFixed(2), align: "RIGHT", width: 0.2 }
-                ]);
-              });
+                itens.forEach(item => {
+                  const nome = (item.produto_nome || 'Item').substring(0, 15);
+                  const qtdStr = item.peso_kg > 0 ? item.peso_kg.toFixed(3) : item.qtd.toString();
+                  printer.tableCustom([
+                    { text: nome, align: "LEFT", width: 0.4 },
+                    { text: qtdStr, align: "CENTER", width: 0.2 },
+                    { text: item.preco_unitario.toFixed(2), align: "RIGHT", width: 0.2 },
+                    { text: item.subtotal.toFixed(2), align: "RIGHT", width: 0.2 }
+                  ]);
+                });
 
-              printer
-                .text('--------------------------------').align('rt')
-                .text(`Subtotal: ${formatarMoeda(venda.total + (venda.desconto || 0))}`)
-                .text(`Desconto: ${formatarMoeda(venda.desconto || 0)}`)
-                .style('b').size(1, 1).text(`TOTAL: ${formatarMoeda(venda.total)}`)
-                .size(0, 0).style('normal').align('ct')
-                .text('--------------------------------').text('OBRIGADO PELA PREFERENCIA')
-                .feed(3).cut().close();
+                printer
+                  .text('--------------------------------').align('rt')
+                  .text(`Subtotal: ${formatarMoeda(venda.total + (venda.desconto || 0))}`)
+                  .text(`Desconto: ${formatarMoeda(venda.desconto || 0)}`)
+                  .style('b').size(1, 1).text(`TOTAL: ${formatarMoeda(venda.total)}`)
+                  .size(0, 0).style('normal').align('ct')
+                  .text('--------------------------------').text('OBRIGADO PELA PREFERENCIA')
+                  .feed(3).cut();
+              }
+              printer.close();
 
               resolve({ ok: true });
             } catch (printErr) {

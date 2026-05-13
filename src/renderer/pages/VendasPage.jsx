@@ -58,6 +58,26 @@ export default function VendasPage() {
     }
   }
 
+  async function reimprimirCupom(id) {
+    try {
+      const configSis = localStorage.getItem('config_sistema');
+      const nomeMercado = configSis ? JSON.parse(configSis).nomeMercado : 'MERCADO PDV';
+      
+      const resultado = await window.api.impressao.cupom({
+        venda_id: id,
+        nome_mercado: nomeMercado
+      });
+
+      if (resultado && resultado.ok) {
+        toast('Cupom enviado para impressão com sucesso!', 'success');
+      } else {
+        toast(`Erro na impressão: ${resultado?.erro || 'Módulo indisponível'}`, 'error');
+      }
+    } catch (err) {
+      toast('Erro ao tentar imprimir cupom', 'error');
+    }
+  }
+
   return (
     <div className="page-content">
       <div className="page-header">
@@ -164,7 +184,14 @@ export default function VendasPage() {
           </div>
           <div className="modal-footer">
             {detalhes.status === 'finalizada' && (
-              <button className="btn btn-danger" onClick={() => cancelarVenda(detalhes.id)}>Cancelar Venda</button>
+              <>
+                <button className="btn btn-primary" onClick={() => reimprimirCupom(detalhes.id)}>
+                  🖨️ Reimprimir Cupom
+                </button>
+                <button className="btn btn-danger" onClick={() => cancelarVenda(detalhes.id)}>
+                  Cancelar Venda
+                </button>
+              </>
             )}
             <button className="btn btn-secondary" onClick={() => setDetalhes(null)}>Fechar</button>
           </div>
