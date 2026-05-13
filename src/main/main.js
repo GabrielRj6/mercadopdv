@@ -83,7 +83,7 @@ function registrarTodosHandlers() {
     });
 
     autoUpdater.on('update-downloaded', () => {
-      if (mainWindow) mainWindow.webContents.send('updater:status', 'Atualização baixada. Reinicie para instalar.');
+      if (mainWindow) mainWindow.webContents.send('updater:status', 'Atualização concluída. Reiniciando para instalar...');
     });
 
     autoUpdater.on('error', (err) => console.error('Erro no updater:', err));
