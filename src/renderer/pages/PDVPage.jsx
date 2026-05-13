@@ -25,6 +25,7 @@ export default function PDVPage(props) {
   const [parcelas, setParcelas] = useState(1);
   const [produtosRapidos, setProdutosRapidos] = useState([]);
   const [buscaTexto, setBuscaTexto] = useState('');
+  const [modalEditarItem, setModalEditarItem] = useState(null);
 
   useEffect(() => {
     carregarProdutosRapidos();
@@ -168,10 +169,26 @@ export default function PDVPage(props) {
     setCarrinho((prev) =>
       prev.map((item, i) =>
         i === index
-          ? { ...item, qtd: novaQtd, subtotal: novaQtd * item.preco_unitario }
+          ? { ...item, qtd: novaQtd, subtotal: novaQtd * (item.preco_unitario - (item.desconto_item || 0)) }
           : item
       )
     );
+  }
+
+  function aplicarDescontoItem(index, novoPreco) {
+    setCarrinho((prev) =>
+      prev.map((item, i) =>
+        i === index
+          ? { 
+              ...item, 
+              preco_alterado: novoPreco, 
+              subtotal: (item.tipo === 'PESO' ? item.peso_kg : item.qtd) * novoPreco 
+            }
+          : item
+      )
+    );
+    setModalEditarItem(null);
+    focarInput();
   }
 
   function removerItem(index) {
@@ -390,7 +407,14 @@ export default function PDVPage(props) {
                     </button>
                   </div>
                 )}
-                <div className="pdv-cart-item-price">{formatarMoeda(item.subtotal)}</div>
+                <div 
+                  className="pdv-cart-item-price" 
+                  style={{ cursor: 'pointer', borderBottom: '1px dashed var(--accent-primary-transparent)' }} 
+                  onClick={() => setModalEditarItem({ ...item, index, novoPreco: item.preco_alterado || item.preco_unitario })}
+                  title="Clique para alterar preço deste item"
+                >
+                  {formatarMoeda(item.subtotal)}
+                </div>
                 <button className="pdv-cart-item-remove" onClick={() => removerItem(index)}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                 </button>
@@ -568,6 +592,33 @@ export default function PDVPage(props) {
             >
               ✓ Confirmar e Finalizar
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {modalEditarItem && (
+        <Modal titulo={`Ajustar Preço - ${modalEditarItem.nome}`} onFechar={() => { setModalEditarItem(null); focarInput(); }}>
+          <div className="modal-body">
+            <div className="input-group">
+              <label>Preço Unitário (R$)</label>
+              <input
+                type="number"
+                className="input btn-lg"
+                style={{ fontSize: 24, fontWeight: 700, textAlign: 'center' }}
+                value={modalEditarItem.novoPreco}
+                onChange={(e) => setModalEditarItem({ ...modalEditarItem, novoPreco: e.target.value })}
+                onKeyDown={(e) => e.key === 'Enter' && aplicarDescontoItem(modalEditarItem.index, parseFloat(modalEditarItem.novoPreco))}
+                autoFocus
+                step="0.01"
+              />
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center' }}>
+                Preço original: {formatarMoeda(modalEditarItem.preco_unitario)}
+              </div>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn btn-secondary" onClick={() => { setModalEditarItem(null); focarInput(); }}>Cancelar</button>
+            <button className="btn btn-success" onClick={() => aplicarDescontoItem(modalEditarItem.index, parseFloat(modalEditarItem.novoPreco))}>Aplicar</button>
           </div>
         </Modal>
       )}
