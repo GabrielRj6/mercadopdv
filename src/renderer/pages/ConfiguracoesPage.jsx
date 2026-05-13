@@ -22,7 +22,7 @@ export default function ConfiguracoesPage() {
       setChecandoUpdate(status);
       toast(status, 'info');
       // Se for a mensagem de conclusão, aguarda um pouco e reinicia
-      if (status.includes('reinicie') || status.includes('Reinicie')) {
+      if (status.toLowerCase().includes('concluída') || status.toLowerCase().includes('reiniciando')) {
         setTimeout(() => window.api.invoke('updater:instalar'), 3000);
       }
     });
