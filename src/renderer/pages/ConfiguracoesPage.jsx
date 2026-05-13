@@ -17,7 +17,18 @@ export default function ConfiguracoesPage() {
 
   useEffect(() => {
     carregarDados();
-  }, []);
+
+    const cleanup = window.api.on('updater:status', (status) => {
+      setChecandoUpdate(status);
+      toast(status, 'info');
+      // Timeout se for a mensagem de conclusão
+      if (status.includes('reinicie') || status.includes('Reinicie')) {
+        setTimeout(() => window.api.invoke('janela:fechar'), 5000); // Opção para fechar e aplicar auto (opcional)
+      }
+    });
+
+    return cleanup;
+  }, [toast]);
 
   async function carregarDados() {
     try {
@@ -193,18 +204,17 @@ export default function ConfiguracoesPage() {
                 className="btn btn-secondary btn-sm" 
                 style={{ marginTop: 16, width: '100%' }}
                 onClick={async () => {
-                  setChecandoUpdate(true);
+                  setChecandoUpdate('Buscando atualizações...');
                   try {
                     await window.api.invoke('updater:verificar');
-                    toast('Verificando por novas versões...', 'info');
                   } catch (err) {
-                    toast('Erro ao verificar atualizações', 'error');
+                    setChecandoUpdate('');
+                    toast('Erro ao iniciar verificação', 'error');
                   }
-                  setTimeout(() => setChecandoUpdate(false), 2000);
                 }}
-                disabled={checandoUpdate}
+                disabled={checandoUpdate !== false && checandoUpdate !== ''}
               >
-                {checandoUpdate ? 'Buscando...' : 'Verificar Atualizações'}
+                {checandoUpdate || 'Verificar Atualizações'}
               </button>
             </div>
           </div>
