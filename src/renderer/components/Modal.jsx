@@ -1,6 +1,6 @@
 export default function Modal({ titulo, children, onFechar, largura }) {
   return (
-    <div className="modal-overlay" onClick={onFechar}>
+    <div className="modal-overlay">
       <div
         className="modal"
         style={largura ? { maxWidth: largura } : undefined}
