@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('api', {
     maximizar: () => ipcRenderer.send('janela:maximizar'),
     fechar: () => ipcRenderer.send('janela:fechar'),
     abrirLink: (url) => ipcRenderer.invoke('janela:abrirLink', url),
+    abrirWhatsApp: (telefone, mensagem) => ipcRenderer.invoke('janela:abrirWhatsApp', telefone, mensagem),
   },
   invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
   on: (channel, callback) => {

@@ -110,6 +110,18 @@ app.whenReady().then(() => {
       shell.openExternal(url);
       return { ok: true };
     });
+    ipcMain.handle('janela:abrirWhatsApp', (_event, telefone, mensagem) => {
+      // Limpa o telefone para formato internacional
+      const telLimpo = telefone.replace(/\D/g, '');
+      const telFormatado = telLimpo.startsWith('55') ? telLimpo : `55${telLimpo}`;
+      
+      // Usa a classe URL do Node para garantir codificagem perfeita
+      const url = new URL(`https://wa.me/${telFormatado}`);
+      url.searchParams.set('text', mensagem);
+      
+      shell.openExternal(url.toString());
+      return { ok: true };
+    });
 
     createWindow();
   } catch (err) {
