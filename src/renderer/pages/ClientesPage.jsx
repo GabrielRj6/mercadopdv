@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import Modal from '../components/Modal';
@@ -146,28 +146,28 @@ export default function ClientesPage() {
     const debitos = (cliente.movimentos || []).filter(m => m.tipo === 'debito');
     const pagamentos = (cliente.movimentos || []).filter(m => m.tipo === 'pagamento');
 
-    // Monta a mensagem
-    let msg = `Olá *${cliente.nome}*! 👋\n\n`;
-    msg += `Passando para lembrar sobre sua conta pendente aqui no *${nomeMercado}*.\n\n`;
-    msg += `📋 *Extrato de Compras:*\n`;
+    // Monta a mensagem (sem emojis para evitar problema de codificacao)
+    let msg = 'Ola *' + cliente.nome + '*!' + '\n\n';
+    msg += 'Passando para lembrar sobre sua conta pendente aqui no *' + nomeMercado + '*.' + '\n\n';
+    msg += '*Extrato de Compras:*' + '\n';
 
     debitos.forEach(d => {
       const dataFormatada = new Date(d.data).toLocaleDateString('pt-BR');
-      msg += `▪️ ${dataFormatada} — ${d.descricao || 'Compra fiado'} — R$ ${d.valor.toFixed(2)}\n`;
+      msg += '- ' + dataFormatada + ' - ' + (d.descricao || 'Compra fiado') + ' - R$ ' + d.valor.toFixed(2) + '\n';
     });
 
     if (pagamentos.length > 0) {
-      msg += `\n✅ *Pagamentos já realizados:*\n`;
+      msg += '\n' + '*Pagamentos ja realizados:*' + '\n';
       pagamentos.forEach(p => {
         const dataFormatada = new Date(p.data).toLocaleDateString('pt-BR');
-        msg += `▪️ ${dataFormatada} — ${p.descricao || 'Pagamento'} — R$ ${p.valor.toFixed(2)}\n`;
+        msg += '- ' + dataFormatada + ' - ' + (p.descricao || 'Pagamento') + ' - R$ ' + p.valor.toFixed(2) + '\n';
       });
     }
 
-    msg += `\n💰 *Saldo devedor: R$ ${cliente.saldo_devedor.toFixed(2)}*\n\n`;
-    msg += `💳 *Formas de pagamento aceitas:*\n`;
-    msg += `• Dinheiro\n• PIX\n• Cartão de Débito\n• Cartão de Crédito\n\n`;
-    msg += `Pode passar aqui quando puder para regularizar. Obrigado! 😊`;
+    msg += '\n' + '*Saldo devedor: R$ ' + cliente.saldo_devedor.toFixed(2) + '*' + '\n\n';
+    msg += '*Formas de pagamento aceitas:*' + '\n';
+    msg += '- Dinheiro' + '\n' + '- PIX' + '\n' + '- Cartao de Debito' + '\n' + '- Cartao de Credito' + '\n\n';
+    msg += 'Pode passar aqui quando puder para regularizar. Obrigado!';
 
     // Limpa o telefone para formato internacional
     const telLimpo = cliente.telefone.replace(/\D/g, '');
