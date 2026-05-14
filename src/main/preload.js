@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('api', {
     listar: (filtros) => ipcRenderer.invoke('vendas:listar', filtros),
     buscarPorId: (id) => ipcRenderer.invoke('vendas:buscarPorId', id),
     cancelar: (id) => ipcRenderer.invoke('vendas:cancelar', id),
+    cancelarItem: (itemId) => ipcRenderer.invoke('vendas:cancelarItem', itemId),
   },
   caixa: {
     abrir: (operadorId) => ipcRenderer.invoke('caixa:abrir', operadorId),
