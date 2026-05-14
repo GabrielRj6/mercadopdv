@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import Modal from '../components/Modal';
@@ -146,30 +146,34 @@ export default function ClientesPage() {
     const debitos = (cliente.movimentos || []).filter(m => m.tipo === 'debito');
     const pagamentos = (cliente.movimentos || []).filter(m => m.tipo === 'pagamento');
 
-    // Monta a mensagem com emojis reais (o main process resolvera a codificacao)
-    let msg = `Olá *${cliente.nome}*! 👋\n\n`;
-    msg += `Passando para lembrar sobre sua conta pendente aqui no *${nomeMercado}*.\n\n`;
-    msg += `📋 *Extrato de Compras:*\n`;
+    // Monta a mensagem focada em legibilidade e sem emojis (para evitar erro ◆)
+    let msg = 'Olá *' + cliente.nome + '*!\n\n';
+    msg += 'Passando para lembrar sobre sua conta pendente aqui no *' + nomeMercado + '*.\n\n';
+    msg += '*EXTRATO DE COMPRAS:*\n';
 
     debitos.forEach(d => {
       const dataFormatada = new Date(d.data).toLocaleDateString('pt-BR');
-      msg += `▪️ ${dataFormatada} - ${d.descricao || 'Compra fiado'} - R$ ${d.valor.toFixed(2)}\n`;
+      msg += '> ' + dataFormatada + ' - ' + (d.descricao || 'Compra fiado') + ' - R$ ' + d.valor.toFixed(2) + '\n';
     });
 
     if (pagamentos.length > 0) {
-      msg += `\n✅ *Pagamentos já realizados:*\n`;
+      msg += '\n*PAGAMENTOS REALIZADOS:*\n';
       pagamentos.forEach(p => {
         const dataFormatada = new Date(p.data).toLocaleDateString('pt-BR');
-        msg += `▪️ ${dataFormatada} - ${p.descricao || 'Pagamento'} - R$ ${p.valor.toFixed(2)}\n`;
+        msg += '> ' + dataFormatada + ' - ' + (p.descricao || 'Pagamento') + ' - R$ ' + p.valor.toFixed(2) + '\n';
       });
     }
 
-    msg += `\n💰 *Saldo devedor: R$ ${cliente.saldo_devedor.toFixed(2)}*\n\n`;
-    msg += `💳 *Formas de pagamento aceitas:*\n`;
-    msg += `• Dinheiro\n• PIX\n• Cartão de Débito\n• Cartão de Crédito\n\n`;
-    msg += `Pode passar aqui quando puder para regularizar. Obrigado! 😊`;
+    msg += '\n*SALDO DEVEDOR ATUAL: R$ ' + cliente.saldo_devedor.toFixed(2) + '*\n\n';
+    msg += '*FORMAS DE PAGAMENTO ACEITAS:*\n';
+    msg += '- Dinheiro\n- PIX\n- Cartão de Débito\n- Cartão de Crédito\n\n';
+    msg += 'Pode passar aqui quando puder para regularizar. Obrigado!';
 
-    await window.api.janela.abrirWhatsApp(cliente.telefone, msg);
+    const telLimpo = cliente.telefone.replace(/\D/g, '');
+    const telFormatado = telLimpo.startsWith('55') ? telLimpo : '55' + telLimpo;
+    const url = 'https://api.whatsapp.com/send?phone=' + telFormatado + '&text=' + encodeURIComponent(msg);
+
+    await window.api.janela.abrirWhatsApp(url);
     toast('WhatsApp aberto com a cobrança! Só apertar enviar.', 'success');
   }
 
