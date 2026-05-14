@@ -40,6 +40,13 @@ function migrarSchema() {
   if (!nomesColunas.includes('foto')) {
     db.exec("ALTER TABLE produtos ADD COLUMN foto TEXT NULL");
   }
+
+  // Colunas novas em venda_itens
+  const colunasVendaItens = db.prepare("PRAGMA table_info(venda_itens)").all();
+  const nomesColunasItens = colunasVendaItens.map(c => c.name);
+  if (!nomesColunasItens.includes('status')) {
+    db.exec("ALTER TABLE venda_itens ADD COLUMN status TEXT DEFAULT 'ativo'");
+  }
 }
 
 function criarTabelas() {

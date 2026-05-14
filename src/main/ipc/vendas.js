@@ -147,6 +147,54 @@ function registrarHandlersVendas(ipcMain, db) {
       return { ok: false, erro: err.message };
     }
   });
+
+  ipcMain.handle('vendas:cancelarItem', (_event, itemId) => {
+    try {
+      const banco = db.obterDb();
+
+      const cancelarItem = banco.transaction((id) => {
+        const item = banco.prepare('SELECT * FROM venda_itens WHERE id = ?').get(id);
+        if (!item || item.status === 'cancelado') return { ok: false, erro: 'Item não encontrado ou já cancelado' };
+
+        const venda = banco.prepare('SELECT * FROM vendas WHERE id = ?').get(item.venda_id);
+        if (!venda || venda.status === 'cancelada') return { ok: false, erro: 'Venda cancelada ou não encontrada' };
+
+        // Devolve estoque
+        const quantidade = item.peso_kg > 0 ? item.peso_kg : item.qtd;
+        if (quantidade > 0) {
+          banco.prepare('UPDATE produtos SET estoque = estoque + ? WHERE id = ?')
+            .run(quantidade, item.produto_id);
+        }
+
+        // Marca item como cancelado
+        banco.prepare("UPDATE venda_itens SET status = 'cancelado' WHERE id = ?").run(id);
+
+        // Atualiza o total da venda
+        const novoTotal = venda.total - item.subtotal;
+        banco.prepare('UPDATE vendas SET total = ? WHERE id = ?').run(novoTotal, item.venda_id);
+
+        // Se todos os itens forem cancelados, a venda inteira deve ser cancelada?
+        // Vamos checar quantos itens ativos sobraram
+        const ativos = banco.prepare("SELECT COUNT(*) as total FROM venda_itens WHERE venda_id = ? AND status = 'ativo'").get(item.venda_id);
+        if (ativos.total === 0) {
+          banco.prepare("UPDATE vendas SET status = 'cancelada' WHERE id = ?").run(item.venda_id);
+        }
+
+        // Registra a sangria do valor devolvido
+        banco.prepare(`
+          INSERT INTO caixa_movimentos (tipo, valor, descricao, operador_id)
+          VALUES ('sangria', ?, ?, ?)
+        `).run(-item.subtotal, `Devolução Item: ID #${id} da Venda #${item.venda_id}`, venda.operador_id);
+
+        return { ok: true, valorDevolver: item.subtotal };
+      });
+
+      return cancelarItem(itemId);
+    } catch (err) {
+      console.error("Erro ao cancelar item:", err);
+      return { ok: false, erro: err.message };
+    }
+  });
 }
 
 module.exports = { registrarHandlersVendas };

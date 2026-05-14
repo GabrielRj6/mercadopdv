@@ -58,6 +58,23 @@ export default function VendasPage() {
     }
   }
 
+  async function cancelarItem(itemId, subtotal) {
+    if (!window.confirm(`Deseja realmente cancelar este item? Valor a devolver: ${formatarMoeda(subtotal)}`)) return;
+
+    try {
+      const resultado = await window.api.vendas.cancelarItem(itemId);
+      if (resultado && resultado.ok) {
+        toast(`Item cancelado! Devolver ${formatarMoeda(subtotal)} ao cliente.`, 'success');
+        verDetalhes(detalhes.id); // Recarrega detalhes
+        carregarVendas(); // Recarrega lista
+      } else {
+        toast(resultado?.erro || 'Erro ao cancelar item', 'error');
+      }
+    } catch (err) {
+      toast('Falha na comunicação com o servidor', 'error');
+    }
+  }
+
   async function reimprimirCupom(id) {
     try {
       const configSis = localStorage.getItem('config_sistema');
@@ -161,16 +178,24 @@ export default function VendasPage() {
                     <th>Qtd/Peso</th>
                     <th>Unitário</th>
                     <th>Subtotal</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {detalhes.itens?.map((item) => (
-                    <tr key={item.id}>
+                    <tr key={item.id} style={item.status === 'cancelado' ? { textDecoration: 'line-through', opacity: 0.5 } : {}}>
                       <td style={{ fontWeight: 600 }}>{item.produto_nome}</td>
                       <td><span className="badge badge-info">{item.produto_tipo}</span></td>
                       <td>{item.peso_kg > 0 ? `${item.peso_kg.toFixed(3)} kg` : item.qtd}</td>
                       <td>{formatarMoeda(item.preco_unitario)}</td>
                       <td style={{ fontWeight: 600 }}>{formatarMoeda(item.subtotal)}</td>
+                      <td>
+                        {item.status === 'ativo' && detalhes.status === 'finalizada' && (
+                          <button className="btn-icon" title="Cancelar Item" onClick={() => cancelarItem(item.id, item.subtotal)} style={{ color: 'var(--accent-danger)' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
