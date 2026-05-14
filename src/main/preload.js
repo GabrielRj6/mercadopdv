@@ -31,6 +31,14 @@ contextBridge.exposeInMainWorld('api', {
     salvar: (operador) => ipcRenderer.invoke('operadores:salvar', operador),
     excluir: (id) => ipcRenderer.invoke('operadores:excluir', id),
   },
+  clientes: {
+    listar: (filtros) => ipcRenderer.invoke('clientes:listar', filtros),
+    buscarPorId: (id) => ipcRenderer.invoke('clientes:buscarPorId', id),
+    salvar: (cliente) => ipcRenderer.invoke('clientes:salvar', cliente),
+    excluir: (id) => ipcRenderer.invoke('clientes:excluir', id),
+    registrarDebito: (dados) => ipcRenderer.invoke('clientes:registrarDebito', dados),
+    registrarPagamento: (dados) => ipcRenderer.invoke('clientes:registrarPagamento', dados),
+  },
   relatorios: {
     vendasPorPeriodo: (filtros) => ipcRenderer.invoke('relatorios:vendasPorPeriodo', filtros),
     vendasPorCategoria: (filtros) => ipcRenderer.invoke('relatorios:vendasPorCategoria', filtros),

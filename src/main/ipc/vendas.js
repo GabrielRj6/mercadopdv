@@ -122,7 +122,8 @@ function registrarHandlersVendas(ipcMain, db) {
         const venda = banco.prepare('SELECT * FROM vendas WHERE id = ?').get(vendaId);
         if (!venda || venda.status === 'cancelada') return { ok: false, erro: 'Venda não encontrada ou já cancelada' };
 
-        const itens = banco.prepare('SELECT * FROM venda_itens WHERE venda_id = ?').all(vendaId);
+        // Só devolve estoque de itens que ainda estão ativos (não cancelados individualmente)
+        const itens = banco.prepare("SELECT * FROM venda_itens WHERE venda_id = ? AND (status = 'ativo' OR status IS NULL)").all(vendaId);
         const devolverEstoque = banco.prepare('UPDATE produtos SET estoque = estoque + ? WHERE id = ?');
 
         for (const item of itens) {
@@ -131,6 +132,9 @@ function registrarHandlersVendas(ipcMain, db) {
             devolverEstoque.run(quantidade, item.produto_id);
           }
         }
+
+        // Marca todos os itens como cancelados
+        banco.prepare("UPDATE venda_itens SET status = 'cancelado' WHERE venda_id = ? AND status = 'ativo'").run(vendaId);
 
         banco.prepare("UPDATE vendas SET status = 'cancelada' WHERE id = ?").run(vendaId);
 

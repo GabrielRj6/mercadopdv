@@ -13,6 +13,7 @@ const { registrarHandlersOperadores } = require('./ipc/operadores');
 const { registrarHandlersProdutos } = require('./ipc/produtos');
 const { registrarHandlersRelatorios } = require('./ipc/relatorios');
 const { registrarHandlersVendas } = require('./ipc/vendas');
+const { registrarHandlersClientes } = require('./ipc/clientes');
 
 let mainWindow;
 
@@ -58,6 +59,7 @@ function registrarTodosHandlers() {
     registrarHandlersOperadores(ipcMain, db);
     registrarHandlersLicenca(ipcMain, db);
     registrarHandlersRelatorios(ipcMain, db);
+    registrarHandlersClientes(ipcMain, db);
     
     // Handlers sem dependência de DB
     try {

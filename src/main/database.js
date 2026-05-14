@@ -47,6 +47,32 @@ function migrarSchema() {
   if (!nomesColunasItens.includes('status')) {
     db.exec("ALTER TABLE venda_itens ADD COLUMN status TEXT DEFAULT 'ativo'");
   }
+
+  // Garante tabelas de clientes (criadas na migração para bancos antigos)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clientes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL,
+      telefone TEXT,
+      cpf TEXT,
+      endereco TEXT,
+      observacoes TEXT,
+      ativo INTEGER DEFAULT 1,
+      criado_em TEXT DEFAULT (datetime('now', 'localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS cliente_contas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente_id INTEGER NOT NULL,
+      tipo TEXT NOT NULL CHECK(tipo IN ('debito', 'pagamento')),
+      valor REAL NOT NULL,
+      descricao TEXT,
+      data TEXT DEFAULT (datetime('now', 'localtime')),
+      operador_id INTEGER,
+      FOREIGN KEY (cliente_id) REFERENCES clientes(id),
+      FOREIGN KEY (operador_id) REFERENCES operadores(id)
+    );
+  `);
 }
 
 function criarTabelas() {

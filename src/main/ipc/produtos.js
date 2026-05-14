@@ -1,5 +1,4 @@
 const https = require('https');
-const http = require('http');
 
 function buscarNaCosmosApi(codigo) {
   return new Promise((resolve) => {

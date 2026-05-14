@@ -12,6 +12,7 @@ import RelatoriosPage from './pages/RelatoriosPage';
 import OperadoresPage from './pages/OperadoresPage';
 import BackupPage from './pages/BackupPage';
 import ConfiguracoesPage from './pages/ConfiguracoesPage';
+import ClientesPage from './pages/ClientesPage';
 
 function AppContent() {
   const { operador } = useAuth();
@@ -26,6 +27,7 @@ function AppContent() {
       case 'vendas': return <VendasPage />;
       case 'caixa': return <CaixaPage />;
       case 'relatorios': return <RelatoriosPage />;
+      case 'clientes': return <ClientesPage />;
       case 'operadores': return <OperadoresPage />;
       case 'backup': return <BackupPage />;
       case 'config': return <ConfiguracoesPage />;
