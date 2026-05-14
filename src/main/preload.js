@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('api', {
     minimizar: () => ipcRenderer.send('janela:minimizar'),
     maximizar: () => ipcRenderer.send('janela:maximizar'),
     fechar: () => ipcRenderer.send('janela:fechar'),
+    abrirLink: (url) => ipcRenderer.invoke('janela:abrirLink', url),
   },
   invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
   on: (channel, callback) => {

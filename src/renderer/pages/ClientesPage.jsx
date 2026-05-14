@@ -129,6 +129,55 @@ export default function ClientesPage() {
     }
   }
 
+  async function cobrarWhatsApp(clienteId) {
+    const cliente = await window.api.clientes.buscarPorId(clienteId);
+    if (!cliente) { toast('Cliente não encontrado', 'error'); return; }
+    if (!cliente.telefone) { toast('Este cliente não tem telefone cadastrado', 'warning'); return; }
+    if (cliente.saldo_devedor <= 0) { toast('Este cliente não tem dívidas pendentes', 'info'); return; }
+
+    // Pega o nome do mercado das configurações
+    let nomeMercado = 'Mercado';
+    try {
+      const configSis = localStorage.getItem('config_sistema');
+      if (configSis) nomeMercado = JSON.parse(configSis).nomeMercado || 'Mercado';
+    } catch(e) {}
+
+    // Filtra apenas débitos não quitados
+    const debitos = (cliente.movimentos || []).filter(m => m.tipo === 'debito');
+    const pagamentos = (cliente.movimentos || []).filter(m => m.tipo === 'pagamento');
+
+    // Monta a mensagem
+    let msg = `Olá *${cliente.nome}*! 👋\n\n`;
+    msg += `Passando para lembrar sobre sua conta pendente aqui no *${nomeMercado}*.\n\n`;
+    msg += `📋 *Extrato de Compras:*\n`;
+
+    debitos.forEach(d => {
+      const dataFormatada = new Date(d.data).toLocaleDateString('pt-BR');
+      msg += `▪️ ${dataFormatada} — ${d.descricao || 'Compra fiado'} — R$ ${d.valor.toFixed(2)}\n`;
+    });
+
+    if (pagamentos.length > 0) {
+      msg += `\n✅ *Pagamentos já realizados:*\n`;
+      pagamentos.forEach(p => {
+        const dataFormatada = new Date(p.data).toLocaleDateString('pt-BR');
+        msg += `▪️ ${dataFormatada} — ${p.descricao || 'Pagamento'} — R$ ${p.valor.toFixed(2)}\n`;
+      });
+    }
+
+    msg += `\n💰 *Saldo devedor: R$ ${cliente.saldo_devedor.toFixed(2)}*\n\n`;
+    msg += `💳 *Formas de pagamento aceitas:*\n`;
+    msg += `• Dinheiro\n• PIX\n• Cartão de Débito\n• Cartão de Crédito\n\n`;
+    msg += `Pode passar aqui quando puder para regularizar. Obrigado! 😊`;
+
+    // Limpa o telefone para formato internacional
+    const telLimpo = cliente.telefone.replace(/\D/g, '');
+    const telFormatado = telLimpo.startsWith('55') ? telLimpo : `55${telLimpo}`;
+
+    const url = `https://wa.me/${telFormatado}?text=${encodeURIComponent(msg)}`;
+    await window.api.janela.abrirLink(url);
+    toast('WhatsApp aberto com a cobrança! Só apertar enviar.', 'success');
+  }
+
   const totalDevido = clientes.reduce((acc, c) => acc + Math.max(0, c.saldo_devedor), 0);
 
   return (
@@ -200,6 +249,11 @@ export default function ClientesPage() {
                     <button className="btn-icon" onClick={() => setModalPagamento({ clienteId: c.id, clienteNome: c.nome, saldo: c.saldo_devedor, valor: '', descricao: '' })} title="Registrar Pagamento" style={{ color: 'var(--accent-success)' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
                     </button>
+                    {c.telefone && c.saldo_devedor > 0 && (
+                      <button className="btn-icon" onClick={() => cobrarWhatsApp(c.id)} title="Cobrar via WhatsApp" style={{ color: '#25D366' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                      </button>
+                    )}
                     <button className="btn-icon" onClick={() => abrirEditarCliente(c)} title="Editar">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
@@ -269,6 +323,11 @@ export default function ClientesPage() {
                 <button className="btn btn-success btn-sm" onClick={() => setModalPagamento({ clienteId: modalExtrato.id, clienteNome: modalExtrato.nome, saldo: modalExtrato.saldo_devedor, valor: '', descricao: '' })}>
                   ✓ Registrar Pagamento
                 </button>
+                {modalExtrato.telefone && modalExtrato.saldo_devedor > 0 && (
+                  <button className="btn btn-sm" style={{ background: '#25D366', color: '#fff', border: 'none' }} onClick={() => cobrarWhatsApp(modalExtrato.id)}>
+                    📱 Cobrar WhatsApp
+                  </button>
+                )}
               </div>
             </div>
 

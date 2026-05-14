@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const db = require('./database');
@@ -106,6 +106,10 @@ app.whenReady().then(() => {
       mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize();
     });
     ipcMain.on('janela:fechar', () => mainWindow?.close());
+    ipcMain.handle('janela:abrirLink', (_event, url) => {
+      shell.openExternal(url);
+      return { ok: true };
+    });
 
     createWindow();
   } catch (err) {
