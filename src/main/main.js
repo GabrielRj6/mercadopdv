@@ -130,5 +130,6 @@ app.on('window-all-closed', () => {
 // Tratamento de erros não capturados para evitar que o app morra silenciosamente
 process.on('uncaughtException', (err) => {
   console.error('Excessão não capturada:', err);
+  app.quit();
 });
 

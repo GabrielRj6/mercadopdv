@@ -9,7 +9,7 @@ function registrarHandlersVendas(ipcMain, db) {
           VALUES (?, ?, ?, ?)
         `).run(v.operador_id, v.total, v.desconto || 0, v.forma_pagamento);
 
-        const vendaId = result.lastInsertRowid;
+        const vendaId = Number(result.lastInsertRowid);
 
         const inserirItem = banco.prepare(`
           INSERT INTO venda_itens (venda_id, produto_id, qtd, peso_kg, preco_unitario, subtotal)
@@ -17,19 +17,27 @@ function registrarHandlersVendas(ipcMain, db) {
         `);
 
         const atualizarEstoque = banco.prepare(
-          'UPDATE produtos SET estoque = estoque - ? WHERE id = ?'
+          'UPDATE produtos SET estoque = estoque - ? WHERE id = ? AND estoque >= ?'
+        );
+
+        const verificarEstoque = banco.prepare(
+          'SELECT estoque FROM produtos WHERE id = ?'
         );
 
         for (const item of v.itens) {
+          const quantidadeBaixa = item.peso_kg > 0 ? item.peso_kg : item.qtd;
+          if (quantidadeBaixa > 0) {
+            const produto = verificarEstoque.get(item.produto_id);
+            if (!produto || produto.estoque < quantidadeBaixa) {
+              throw new Error(`Estoque insuficiente para produto ID ${item.produto_id}. Disponível: ${produto?.estoque || 0}, Necessário: ${quantidadeBaixa}`);
+            }
+            atualizarEstoque.run(quantidadeBaixa, item.produto_id, quantidadeBaixa);
+          }
+
           inserirItem.run(
             vendaId, item.produto_id, item.qtd || 0,
             item.peso_kg || 0, item.preco_unitario, item.subtotal
           );
-
-          const quantidadeBaixa = item.peso_kg > 0 ? item.peso_kg : item.qtd;
-          if (quantidadeBaixa > 0) {
-            atualizarEstoque.run(quantidadeBaixa, item.produto_id);
-          }
         }
 
         banco.prepare(`

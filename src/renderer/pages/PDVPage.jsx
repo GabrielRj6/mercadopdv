@@ -169,20 +169,25 @@ export default function PDVPage(props) {
     setCarrinho((prev) =>
       prev.map((item, i) =>
         i === index
-          ? { ...item, qtd: novaQtd, subtotal: novaQtd * (item.preco_unitario - (item.desconto_item || 0)) }
+          ? { ...item, qtd: novaQtd, subtotal: novaQtd * (item.preco_alterado || item.preco_unitario) }
           : item
       )
     );
   }
 
   function aplicarDescontoItem(index, novoPreco) {
+    const precoNumerico = parseFloat(novoPreco);
+    if (isNaN(precoNumerico) || precoNumerico < 0) {
+      toast('Preço inválido', 'error');
+      return;
+    }
     setCarrinho((prev) =>
       prev.map((item, i) =>
         i === index
           ? { 
               ...item, 
-              preco_alterado: novoPreco, 
-              subtotal: (item.tipo === 'PESO' ? item.peso_kg : item.qtd) * novoPreco 
+              preco_alterado: precoNumerico, 
+              subtotal: (item.tipo === 'PESO' ? item.peso_kg : item.qtd) * precoNumerico 
             }
           : item
       )
@@ -197,18 +202,14 @@ export default function PDVPage(props) {
 
   function calcularTotal() {
     const subtotal = calcularSubtotal();
-    if (tipoDesconto === '%') {
-      return Math.max(0, subtotal - (subtotal * (desconto / 100)));
-    }
-    return Math.max(0, subtotal - desconto);
+    const descontoValor = tipoDesconto === '%' ? subtotal * (desconto / 100) : desconto;
+    return Math.max(0, subtotal - Math.min(descontoValor, subtotal));
   }
 
   function calcularValorDesconto() {
     const subtotal = calcularSubtotal();
-    if (tipoDesconto === '%') {
-      return subtotal * (desconto / 100);
-    }
-    return desconto;
+    const descontoValor = tipoDesconto === '%' ? subtotal * (desconto / 100) : desconto;
+    return Math.min(descontoValor, subtotal);
   }
 
   function calcularSubtotal() {
@@ -231,6 +232,65 @@ export default function PDVPage(props) {
       toast('Carrinho vazio', 'error');
       return;
     }
+
+    try {
+      const statusCaixa = await window.api.caixa.status();
+      if (!statusCaixa.aberto) {
+        toast('O caixa precisa estar aberto para finalizar vendas', 'error');
+        return;
+      }
+    } catch (err) {
+      toast('Erro ao verificar status do caixa', 'error');
+      return;
+    }
+
+    const venda = {
+      operador_id: operador?.id || 1,
+      total: calcularTotal(),
+      desconto: desconto,
+      forma_pagamento: formaPagamento,
+      itens: carrinho.map(i => ({
+        produto_id: i.produto_id,
+        qtd: i.qtd || 0,
+        peso_kg: i.peso_kg || 0,
+        preco_unitario: parseFloat(i.preco_alterado || i.preco_unitario),
+        subtotal: i.subtotal
+      }))
+    };
+
+    try {
+      const resultado = await window.api.vendas.registrar(venda);
+      
+      if (resultado && resultado.ok) {
+        toast('Venda finalizada com sucesso!', 'success');
+        
+        try {
+          const configSis = localStorage.getItem('config_sistema');
+          const nomeMercado = configSis ? JSON.parse(configSis).nomeMercado : 'MERCADO PDV';
+          
+          await window.api.impressao.cupom({
+            venda_id: resultado.id,
+            nome_mercado: nomeMercado
+          });
+        } catch (printErr) {
+          console.warn('Erro ao imprimir cupom:', printErr);
+        }
+
+        setCarrinho([]);
+        setDesconto(0);
+        setModalPagamento(false);
+        setFormaPagamento('dinheiro');
+        setValorRecebido('');
+        setParcelas(1);
+        carregarProdutosRapidos();
+        focarInput();
+      } else {
+        toast(`Erro ao registrar: ${resultado?.erro || 'Erro no banco de dados'}`, 'error');
+      }
+    } catch (err) {
+      toast('Falha crítica na comunicação com o sistema', 'error');
+    }
+  }
 
     const venda = {
       operador_id: operador?.id || 1,
@@ -606,7 +666,7 @@ export default function PDVPage(props) {
                 className="input btn-lg"
                 style={{ fontSize: 24, fontWeight: 700, textAlign: 'center' }}
                 value={modalEditarItem.novoPreco}
-                onChange={(e) => setModalEditarItem({ ...modalEditarItem, novoPreco: e.target.value })}
+                onChange={(e) => setModalEditarItem({ ...modalEditarItem, novoPreco: parseFloat(e.target.value) || '' })}
                 onKeyDown={(e) => e.key === 'Enter' && aplicarDescontoItem(modalEditarItem.index, parseFloat(modalEditarItem.novoPreco))}
                 autoFocus
                 step="0.01"

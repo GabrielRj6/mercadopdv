@@ -35,22 +35,17 @@ function AppContent() {
     }
   }
 
-  if (paginaAtual === 'pdv') {
-    return (
-      <div className="app-layout">
-        <TitleBar />
-        <PDVPage onNavegar={setPaginaAtual} />
-      </div>
-    );
-  }
-
   return (
     <div className="app-layout">
       <TitleBar />
-      <div className="app-content">
-        <Sidebar paginaAtual={paginaAtual} onNavegar={setPaginaAtual} />
-        {renderizarPagina()}
-      </div>
+      {paginaAtual === 'pdv' ? (
+        <PDVPage onNavegar={setPaginaAtual} />
+      ) : (
+        <div className="app-content">
+          <Sidebar paginaAtual={paginaAtual} onNavegar={setPaginaAtual} />
+          {renderizarPagina()}
+        </div>
+      )}
     </div>
   );
 }

@@ -38,17 +38,49 @@ function registrarHandlersBackup(ipcMain, db) {
   });
 
   ipcMain.handle('backup:restaurar', (_event, caminho) => {
-    if (!caminho || !fs.existsSync(caminho)) {
-      return { ok: false, erro: 'Arquivo não encontrado' };
+    try {
+      if (!caminho || !fs.existsSync(caminho)) {
+        return { ok: false, erro: 'Arquivo não encontrado' };
+      }
+
+      const caminhoBanco = db.obterCaminho();
+      const caminhoBackup = caminhoBanco + '.backup_temp';
+
+      if (fs.existsSync(caminhoBackup)) {
+        fs.unlinkSync(caminhoBackup);
+      }
+
+      fs.copyFileSync(caminhoBanco, caminhoBackup);
+
+      try {
+        db.fechar();
+        fs.copyFileSync(caminho, caminhoBanco);
+        db.inicializar();
+
+        const banco = db.obterDb();
+        if (!banco) {
+          throw new Error('Falha ao reabrir banco após restauração');
+        }
+
+        banco.prepare('SELECT 1').get();
+
+        return { ok: true };
+      } catch (restoreErr) {
+        console.error('Erro na restauração, tentando reverter:', restoreErr);
+        if (fs.existsSync(caminhoBackup)) {
+          fs.copyFileSync(caminhoBackup, caminhoBanco);
+          db.inicializar();
+        }
+        return { ok: false, erro: 'Falha na restauração: ' + restoreErr.message + '. Backup original mantido.' };
+      } finally {
+        if (fs.existsSync(caminhoBackup)) {
+          try { fs.unlinkSync(caminhoBackup); } catch (e) { /* ignore */ }
+        }
+      }
+    } catch (err) {
+      console.error('Erro geral na restauração:', err);
+      return { ok: false, erro: err.message };
     }
-
-    const caminhoBanco = db.obterCaminho();
-
-    db.fechar();
-    fs.copyFileSync(caminho, caminhoBanco);
-    db.inicializar();
-
-    return { ok: true };
   });
 }
 

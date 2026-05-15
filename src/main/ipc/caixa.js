@@ -81,14 +81,14 @@ function registrarHandlersCaixa(ipcMain, db) {
 
 function obterStatusCaixa(banco) {
   const ultimo = banco.prepare(
-    "SELECT id, tipo FROM caixa_movimentos WHERE tipo IN ('abertura', 'fechamento') ORDER BY id DESC LIMIT 1"
+    "SELECT id, tipo, data FROM caixa_movimentos WHERE tipo IN ('abertura', 'fechamento') ORDER BY id DESC LIMIT 1"
   ).get();
 
   if (!ultimo || ultimo.tipo === 'fechamento') {
     return { aberto: false };
   }
 
-  return { aberto: true, aberturaId: ultimo.id };
+  return { aberto: true, aberturaId: ultimo.id, aberturaData: ultimo.data };
 }
 
 function calcularResumoCaixa(banco, aberturaId) {

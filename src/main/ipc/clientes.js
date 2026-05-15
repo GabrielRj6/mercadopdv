@@ -3,6 +3,19 @@ function registrarHandlersClientes(ipcMain, db) {
   ipcMain.handle('clientes:listar', (_event, filtros = {}) => {
     try {
       const banco = db.obterDb();
+
+      if (filtros.apenasDevedores) {
+        const sql = `
+          SELECT c.*,
+            COALESCE((SELECT SUM(CASE WHEN tipo = 'debito' THEN valor ELSE -valor END) FROM cliente_contas WHERE cliente_id = c.id), 0) as saldo_devedor
+          FROM clientes c
+          WHERE c.ativo = 1
+            AND COALESCE((SELECT SUM(CASE WHEN tipo = 'debito' THEN valor ELSE -valor END) FROM cliente_contas WHERE cliente_id = c.id), 0) > 0
+          ORDER BY c.nome ASC
+        `;
+        return banco.prepare(sql).all();
+      }
+
       let sql = `
         SELECT c.*,
           COALESCE((SELECT SUM(CASE WHEN tipo = 'debito' THEN valor ELSE -valor END) FROM cliente_contas WHERE cliente_id = c.id), 0) as saldo_devedor
@@ -14,10 +27,6 @@ function registrarHandlersClientes(ipcMain, db) {
       if (filtros.busca) {
         sql += ' AND (c.nome LIKE ? OR c.telefone LIKE ? OR c.cpf LIKE ?)';
         params.push(`%${filtros.busca}%`, `%${filtros.busca}%`, `%${filtros.busca}%`);
-      }
-
-      if (filtros.apenasDevedores) {
-        sql += ' HAVING saldo_devedor > 0';
       }
 
       sql += ' ORDER BY c.nome ASC';

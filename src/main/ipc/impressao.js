@@ -47,7 +47,6 @@ function registrarHandlersImpressao(ipcMain, db) {
         try {
           const device = new escpos.USB();
           const options = { encoding: "GB18030" };
-          const printer = new escpos.Printer(device, options);
 
           device.open((error) => {
             if (error) {
@@ -57,6 +56,8 @@ function registrarHandlersImpressao(ipcMain, db) {
 
             try {
               for (let via = 1; via <= 2; via++) {
+                const printer = new escpos.Printer(device, options);
+
                 printer
                   .font('a').align('ct').style('bu').size(1, 1).text(nomeMercado)
                   .size(0, 0).style('normal').text('NAO E DOCUMENTO FISCAL')
@@ -93,8 +94,9 @@ function registrarHandlersImpressao(ipcMain, db) {
                   .size(0, 0).style('normal').align('ct')
                   .text('--------------------------------').text('OBRIGADO PELA PREFERENCIA')
                   .feed(3).cut();
+
+                printer.close();
               }
-              printer.close();
 
               resolve({ ok: true });
             } catch (printErr) {

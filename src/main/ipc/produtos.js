@@ -7,7 +7,6 @@ function buscarNaCosmosApi(codigo) {
       path: `/gtins/${codigo}`,
       method: 'GET',
       headers: {
-        'X-Cosmos-Token': '',
         'User-Agent': 'MercadoPDV/1.0',
       },
     };
@@ -20,7 +19,6 @@ function buscarNaCosmosApi(codigo) {
           try {
             const json = JSON.parse(data);
             let catOriginal = json.ncm?.full_description || 'Geral';
-            // Mapeamento simples para categorias do mercado
             let categoriaFinal = 'Geral';
             const desc = catOriginal.toLowerCase();
             if (desc.includes('bebida') || desc.includes('agua') || desc.includes('suco')) categoriaFinal = 'Bebidas';
@@ -133,7 +131,7 @@ function registrarHandlersProdutos(ipcMain, db) {
   ipcMain.handle('produtos:buscarPorId', (_event, id) => {
     try {
       const banco = db.obterDb();
-      return banco.prepare('SELECT * FROM produtos WHERE id = ?').get(id);
+      return banco.prepare('SELECT * FROM produtos WHERE id = ? AND ativo = 1').get(id);
     } catch (err) {
       return null;
     }
@@ -159,8 +157,8 @@ function registrarHandlersProdutos(ipcMain, db) {
       }
 
       const result = banco.prepare(`
-        INSERT INTO produtos (nome, categoria, preco_custo, preco_venda, estoque, estoque_minimo, tipo, codigo_barras, foto)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO produtos (nome, categoria, preco_custo, preco_venda, estoque, estoque_minimo, tipo, codigo_barras, foto, atualizado_em)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
       `).run(
         produto.nome, produto.categoria || 'Geral', produto.preco_custo || 0, produto.preco_venda,
         produto.estoque || 0, produto.estoque_minimo || 0, produto.tipo, produto.codigo_barras || null, produto.foto || null

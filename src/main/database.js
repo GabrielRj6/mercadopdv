@@ -24,7 +24,6 @@ function inicializar() {
 }
 
 function migrarSchema() {
-  // Garante colunas novas em produtos
   const colunasProdutos = db.prepare("PRAGMA table_info(produtos)").all();
   const nomesColunas = colunasProdutos.map(c => c.name);
   
@@ -41,38 +40,11 @@ function migrarSchema() {
     db.exec("ALTER TABLE produtos ADD COLUMN foto TEXT NULL");
   }
 
-  // Colunas novas em venda_itens
   const colunasVendaItens = db.prepare("PRAGMA table_info(venda_itens)").all();
   const nomesColunasItens = colunasVendaItens.map(c => c.name);
   if (!nomesColunasItens.includes('status')) {
     db.exec("ALTER TABLE venda_itens ADD COLUMN status TEXT DEFAULT 'ativo'");
   }
-
-  // Garante tabelas de clientes (criadas na migração para bancos antigos)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS clientes (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      nome TEXT NOT NULL,
-      telefone TEXT,
-      cpf TEXT,
-      endereco TEXT,
-      observacoes TEXT,
-      ativo INTEGER DEFAULT 1,
-      criado_em TEXT DEFAULT (datetime('now', 'localtime'))
-    );
-
-    CREATE TABLE IF NOT EXISTS cliente_contas (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cliente_id INTEGER NOT NULL,
-      tipo TEXT NOT NULL CHECK(tipo IN ('debito', 'pagamento')),
-      valor REAL NOT NULL,
-      descricao TEXT,
-      data TEXT DEFAULT (datetime('now', 'localtime')),
-      operador_id INTEGER,
-      FOREIGN KEY (cliente_id) REFERENCES clientes(id),
-      FOREIGN KEY (operador_id) REFERENCES operadores(id)
-    );
-  `);
 }
 
 function criarTabelas() {
@@ -142,6 +114,29 @@ function criarTabelas() {
       ativada_em TEXT,
       status TEXT DEFAULT 'inativa'
     );
+
+    CREATE TABLE IF NOT EXISTS clientes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL,
+      telefone TEXT,
+      cpf TEXT,
+      endereco TEXT,
+      observacoes TEXT,
+      ativo INTEGER DEFAULT 1,
+      criado_em TEXT DEFAULT (datetime('now', 'localtime'))
+    );
+
+    CREATE TABLE IF NOT EXISTS cliente_contas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente_id INTEGER NOT NULL,
+      tipo TEXT NOT NULL CHECK(tipo IN ('debito', 'pagamento')),
+      valor REAL NOT NULL,
+      descricao TEXT,
+      data TEXT DEFAULT (datetime('now', 'localtime')),
+      operador_id INTEGER,
+      FOREIGN KEY (cliente_id) REFERENCES clientes(id),
+      FOREIGN KEY (operador_id) REFERENCES operadores(id)
+    );
   `);
 }
 
@@ -149,12 +144,14 @@ function inserirOperadorPadrao() {
   const existe = db.prepare('SELECT id FROM operadores WHERE id = 1').get();
   if (!existe) {
     const crypto = require('crypto');
-    const pinHash = crypto.createHash('sha256').update('1234').digest('hex');
+    const pinTemporario = Math.floor(100000 + Math.random() * 900000).toString();
+    const pinHash = crypto.createHash('sha256').update(pinTemporario).digest('hex');
     db.prepare('INSERT INTO operadores (nome, pin_hash, nivel_acesso) VALUES (?, ?, ?)').run('Administrador', pinHash, 'admin');
+    console.log(`Operador padrão criado com PIN temporário: ${pinTemporario}. Altere no primeiro acesso.`);
   }
 }
 
 function obterDb() { return db; }
 function fechar() { if (db) db.close(); }
 
-module.exports = { inicializar, obterDb, fechar, obterCaminhoBanco, obterCaminho: obterCaminhoBanco };
+module.exports = { inicializar, obterDb, fechar, obterCaminhoBanco };
