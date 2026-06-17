@@ -7,7 +7,8 @@ function buscarNaCosmosApi(codigo) {
       path: `/gtins/${codigo}`,
       method: 'GET',
       headers: {
-        'User-Agent': 'MercadoPDV/1.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
       },
     };
 
@@ -50,13 +51,14 @@ function buscarNaCosmosApi(codigo) {
   });
 }
 
-function buscarNaProdutoXyz(codigo) {
+// Alternativa poderosa: OpenFoodFacts (Gratuita e sem limites)
+function buscarNaOpenFoodFacts(codigo) {
   return new Promise((resolve) => {
     const options = {
-      hostname: 'produto.xyz',
-      path: `/v1/gtin/${codigo}`,
+      hostname: 'world.openfoodfacts.org',
+      path: `/api/v0/product/${codigo}.json`,
       method: 'GET',
-      headers: { 'User-Agent': 'MercadoPDV/1.0' },
+      headers: { 'User-Agent': 'MercadoPDV - Android - Version 1.0' },
     };
 
     const req = https.request(options, (res) => {
@@ -66,11 +68,16 @@ function buscarNaProdutoXyz(codigo) {
         if (res.statusCode === 200) {
           try {
             const json = JSON.parse(data);
-            resolve({
-              nome: json.name || json.description || '',
-              foto: json.thumbnail || json.image || '',
-              categoria: json.category || 'Geral',
-            });
+            if (json.status === 1) {
+              const p = json.product;
+              resolve({
+                nome: p.product_name || p.generic_name || '',
+                foto: p.image_url || p.image_front_url || '',
+                categoria: p.categories ? p.categories.split(',')[0] : 'Mercearia',
+              });
+            } else {
+              resolve(null);
+            }
           } catch {
             resolve(null);
           }
@@ -188,11 +195,13 @@ function registrarHandlersProdutos(ipcMain, db) {
   });
 
   ipcMain.handle('produtos:buscarApi', async (_event, codigo) => {
-    const resultado = await buscarNaCosmosApi(codigo);
-    if (resultado) return { fonte: 'cosmos', ...resultado };
+    // 1. Tenta OpenFoodFacts (Melhor para marcas globais como Coca/Antarctica)
+    const resultadoOff = await buscarNaOpenFoodFacts(codigo);
+    if (resultadoOff) return { fonte: 'openfoodfacts', ...resultadoOff };
 
-    const resultadoXyz = await buscarNaProdutoXyz(codigo);
-    if (resultadoXyz) return { fonte: 'produto_xyz', ...resultadoXyz };
+    // 2. Tenta Cosmos (Melhor para marcas brasileiras regionais)
+    const resultadoCosmos = await buscarNaCosmosApi(codigo);
+    if (resultadoCosmos) return { fonte: 'cosmos', ...resultadoCosmos };
 
     return null;
   });
