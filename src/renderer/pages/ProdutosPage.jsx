@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useToast } from '../contexts/ToastContext';
 import Modal from '../components/Modal';
 
@@ -15,6 +15,8 @@ export default function ProdutosPage() {
   const [filtroTipo, setFiltroTipo] = useState('');
   const [modal, setModal] = useState(null);
   const [buscandoApi, setBuscandoApi] = useState(false);
+  const barcodeInputRef = useRef(null);
+
 
   useEffect(() => { carregarProdutos(); }, []);
 
@@ -28,6 +30,8 @@ export default function ProdutosPage() {
       nome: '', categoria: 'Geral', codigo_barras: '', tipo: 'UNIDADE',
       preco_venda: '', preco_custo: '', estoque: '', estoque_minimo: '', foto: '',
     });
+    // Foca no input apos renderizar o modal
+    setTimeout(() => barcodeInputRef.current?.focus(), 100);
   }
 
   function abrirEditarProduto(produto) {
@@ -185,7 +189,22 @@ export default function ProdutosPage() {
               <div className="input-group full-width">
                 <label>Código de Barras</label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <input type="text" className="input" style={{ flex: 1 }} value={modal.codigo_barras || ''} onChange={(e) => setModal({ ...modal, codigo_barras: e.target.value })} placeholder="Escaneie ou digite" />
+                  <input 
+                    ref={barcodeInputRef}
+                    type="text" 
+                    className="input" 
+                    style={{ flex: 1 }} 
+                    value={modal.codigo_barras || ''} 
+                    onChange={(e) => setModal({ ...modal, codigo_barras: e.target.value })} 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        buscarCodigoApi();
+                      }
+                    }}
+                    placeholder="Escaneie ou digite" 
+                    autoFocus
+                  />
                   <button className="btn btn-secondary" onClick={buscarCodigoApi} disabled={buscandoApi}>
                     {buscandoApi ? <span className="loader" style={{ width: 16, height: 16 }} /> : '🔍 Buscar API'}
                   </button>
