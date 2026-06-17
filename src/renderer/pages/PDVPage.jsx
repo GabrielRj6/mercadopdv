@@ -208,7 +208,7 @@ export default function PDVPage(props) {
 
   function calcularValorDesconto() {
     const subtotal = calcularSubtotal();
-    const descontoValor = tipoDesconto === '%' ? subtotal * (desconto / 100) : desconto;
+    const descontoValor = tipoDesconto === '%' ? subtotal * (desconto / 100) : parseFloat(desconto);
     return Math.min(descontoValor, subtotal);
   }
 
@@ -264,55 +264,6 @@ export default function PDVPage(props) {
       if (resultado && resultado.ok) {
         toast('Venda finalizada com sucesso!', 'success');
         
-        try {
-          const configSis = localStorage.getItem('config_sistema');
-          const nomeMercado = configSis ? JSON.parse(configSis).nomeMercado : 'MERCADO PDV';
-          
-          await window.api.impressao.cupom({
-            venda_id: resultado.id,
-            nome_mercado: nomeMercado
-          });
-        } catch (printErr) {
-          console.warn('Erro ao imprimir cupom:', printErr);
-        }
-
-        setCarrinho([]);
-        setDesconto(0);
-        setModalPagamento(false);
-        setFormaPagamento('dinheiro');
-        setValorRecebido('');
-        setParcelas(1);
-        carregarProdutosRapidos();
-        focarInput();
-      } else {
-        toast(`Erro ao registrar: ${resultado?.erro || 'Erro no banco de dados'}`, 'error');
-      }
-    } catch (err) {
-      toast('Falha crítica na comunicação com o sistema', 'error');
-    }
-  }
-
-    const venda = {
-      operador_id: operador?.id || 1,
-      total: calcularTotal(),
-      desconto: desconto,
-      forma_pagamento: formaPagamento,
-      itens: carrinho.map(i => ({
-        produto_id: i.produto_id,
-        qtd: i.qtd || 0,
-        peso_kg: i.peso_kg || 0,
-        preco_unitario: i.preco_unitario,
-        subtotal: i.subtotal
-      }))
-    };
-
-    try {
-      const resultado = await window.api.vendas.registrar(venda);
-      
-      if (resultado && resultado.ok) {
-        toast('Venda finalizada com sucesso!', 'success');
-        
-        // Tenta imprimir o cupom
         try {
           const configSis = localStorage.getItem('config_sistema');
           const nomeMercado = configSis ? JSON.parse(configSis).nomeMercado : 'MERCADO PDV';

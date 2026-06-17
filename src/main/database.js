@@ -144,10 +144,10 @@ function inserirOperadorPadrao() {
   const existe = db.prepare('SELECT id FROM operadores WHERE id = 1').get();
   if (!existe) {
     const crypto = require('crypto');
-    const pinTemporario = Math.floor(100000 + Math.random() * 900000).toString();
-    const pinHash = crypto.createHash('sha256').update(pinTemporario).digest('hex');
+    const pinPadrao = '1234';
+    const pinHash = crypto.createHash('sha256').update(pinPadrao).digest('hex');
     db.prepare('INSERT INTO operadores (nome, pin_hash, nivel_acesso) VALUES (?, ?, ?)').run('Administrador', pinHash, 'admin');
-    console.log(`Operador padrão criado com PIN temporário: ${pinTemporario}. Altere no primeiro acesso.`);
+    console.log('Operador padrão criado com PIN: 1234. Altere no primeiro acesso.');
   }
 }
 
