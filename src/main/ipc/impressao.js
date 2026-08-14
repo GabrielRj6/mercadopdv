@@ -1,4 +1,5 @@
 const { BrowserWindow } = require('electron');
+const { execSync } = require('child_process');
 const path = require('path');
 
 // ─── ESC/POS via USB (libusb) ───────────────────────────────────
@@ -22,11 +23,51 @@ function formatarDataHora() {
   return new Date().toLocaleString('pt-BR');
 }
 
+// Helper para obter impressoras do Windows (Electron API + PowerShell fallback)
+async function obterImpressorasWindows() {
+  // 1. Tenta API do Electron (getPrintersAsync / getPrinters)
+  try {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (typeof win.webContents.getPrintersAsync === 'function') {
+        const list = await win.webContents.getPrintersAsync();
+        if (list && list.length > 0) return list;
+      }
+      if (typeof win.webContents.getPrinters === 'function') {
+        const list = win.webContents.getPrinters();
+        if (list && list.length > 0) return list;
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao obter impressoras via Electron API:', err.message);
+  }
+
+  // 2. Fallback via PowerShell
+  try {
+    const psOutput = execSync(
+      'powershell -NoProfile -Command "Get-CimInstance Win32_Printer | Select-Object Name, IsDefault | ConvertTo-Json"',
+      { timeout: 4000, encoding: 'utf8' }
+    );
+    if (psOutput && psOutput.trim()) {
+      const parsed = JSON.parse(psOutput.trim());
+      const list = Array.isArray(parsed) ? parsed : [parsed];
+      return list.map(p => ({
+        name: p.Name,
+        isDefault: Boolean(p.IsDefault)
+      }));
+    }
+  } catch (psErr) {
+    console.warn('Erro ao obter impressoras via PowerShell:', psErr.message);
+  }
+
+  return [];
+}
+
 // ─── Método 1: Impressão via escpos-usb (libusb direto) ────────
 function imprimirViaUSB(venda, itens, nomeMercado) {
   return new Promise((resolve) => {
     if (!escpos || !escposUSB) {
-      return resolve({ ok: false, metodo: 'usb', erro: 'Módulo escpos-usb não carregado' });
+      return resolve({ ok: false, metodo: 'usb', erro: 'Módulo escpos-usb não disponível' });
     }
 
     try {
@@ -150,79 +191,53 @@ function gerarHTMLCupom(venda, itens, nomeMercado, via) {
 </body></html>`;
 }
 
-function imprimirViaWindows(venda, itens, nomeMercado, nomeImpressora) {
-  return new Promise(async (resolve) => {
-    let impressorasDisponiveis = [];
+async function imprimirViaWindows(venda, itens, nomeMercado, nomeImpressora) {
+  const impressorasDisponiveis = await obterImpressorasWindows();
+  let impressoraFinal = nomeImpressora;
 
-    try {
-      // Detecta impressoras disponíveis no Windows
-      const tempWin = BrowserWindow.getAllWindows()[0];
-      if (tempWin) {
-        impressorasDisponiveis = tempWin.webContents.getPrinters();
-      }
-    } catch (err) {
-      console.warn('Erro ao listar impressoras:', err.message);
-    }
+  if (!impressoraFinal && impressorasDisponiveis.length > 0) {
+    const elgin = impressorasDisponiveis.find(p =>
+      p.name.toLowerCase().includes('elgin') ||
+      p.name.toLowerCase().includes('i8') ||
+      p.name.toLowerCase().includes('thermal') ||
+      p.name.toLowerCase().includes('pos') ||
+      p.name.toLowerCase().includes('generic')
+    );
 
-    // Determina qual impressora usar
-    let impressoraFinal = nomeImpressora;
-
-    if (!impressoraFinal && impressorasDisponiveis.length > 0) {
-      // Tenta encontrar a Elgin ou impressora térmica automaticamente
-      const elgin = impressorasDisponiveis.find(p =>
-        p.name.toLowerCase().includes('elgin') ||
-        p.name.toLowerCase().includes('i8') ||
-        p.name.toLowerCase().includes('thermal') ||
-        p.name.toLowerCase().includes('pos') ||
-        p.name.toLowerCase().includes('generic')
-      );
-
-      if (elgin) {
-        impressoraFinal = elgin.name;
-      } else {
-        // Usa a impressora padrão
-        const padrao = impressorasDisponiveis.find(p => p.isDefault);
-        if (padrao) impressoraFinal = padrao.name;
-      }
-    }
-
-    if (!impressoraFinal) {
-      return resolve({
-        ok: false,
-        metodo: 'windows',
-        erro: 'Nenhuma impressora encontrada no Windows. Verifique se o serviço Spooler está ativo e a impressora instalada.',
-        impressoras: impressorasDisponiveis.map(p => p.name)
-      });
-    }
-
-    console.log(`[Impressão] Usando impressora Windows: "${impressoraFinal}"`);
-
-    // Imprime 2 vias sequencialmente
-    let viasImpressas = 0;
-
-    for (let via = 1; via <= 2; via++) {
-      try {
-        const html = gerarHTMLCupom(venda, itens, nomeMercado, via);
-        const sucesso = await imprimirHTML(html, impressoraFinal);
-        if (sucesso) viasImpressas++;
-      } catch (err) {
-        console.warn(`Erro ao imprimir via ${via}:`, err.message);
-      }
-    }
-
-    if (viasImpressas > 0) {
-      resolve({ ok: true, metodo: 'windows', impressora: impressoraFinal, vias: viasImpressas });
+    if (elgin) {
+      impressoraFinal = elgin.name;
     } else {
-      resolve({ ok: false, metodo: 'windows', erro: `Falha ao enviar para "${impressoraFinal}"` });
+      const padrao = impressorasDisponiveis.find(p => p.isDefault);
+      if (padrao) impressoraFinal = padrao.name;
     }
-  });
+  }
+
+  console.log(`[Impressão] Usando impressora Windows: "${impressoraFinal || 'Padrão do Sistema'}"`);
+
+  let viasImpressas = 0;
+
+  for (let via = 1; via <= 2; via++) {
+    try {
+      const html = gerarHTMLCupom(venda, itens, nomeMercado, via);
+      const sucesso = await imprimirHTML(html, impressoraFinal);
+      if (sucesso) viasImpressas++;
+    } catch (err) {
+      console.warn(`Erro ao imprimir via ${via}:`, err.message);
+    }
+  }
+
+  if (viasImpressas > 0) {
+    return { ok: true, metodo: 'windows', impressora: impressoraFinal || 'Padrão do Sistema', vias: viasImpressas };
+  } else {
+    return { ok: false, metodo: 'windows', erro: 'Não foi possível imprimir via driver Windows' };
+  }
 }
 
 function imprimirHTML(html, nomeImpressora) {
   return new Promise((resolve) => {
     const printWin = new BrowserWindow({
       show: false,
-      width: 302, // ~80mm
+      width: 302,
       height: 900,
       webPreferences: {
         contextIsolation: true,
@@ -233,16 +248,20 @@ function imprimirHTML(html, nomeImpressora) {
     printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 
     printWin.webContents.on('did-finish-load', () => {
-      // Pequeno delay para garantir renderização completa
       setTimeout(() => {
+        const printOptions = {
+          silent: true,
+          printBackground: true,
+          margins: { marginType: 'none' },
+          pageSize: { width: 80000, height: 297000 }
+        };
+
+        if (nomeImpressora && nomeImpressora.trim()) {
+          printOptions.deviceName = nomeImpressora.trim();
+        }
+
         printWin.webContents.print(
-          {
-            silent: true,
-            deviceName: nomeImpressora,
-            printBackground: true,
-            margins: { marginType: 'none' },
-            pageSize: { width: 80000, height: 297000 } // 80mm x auto (microns)
-          },
+          printOptions,
           (success, errorType) => {
             printWin.close();
             if (success) {
@@ -256,7 +275,6 @@ function imprimirHTML(html, nomeImpressora) {
       }, 300);
     });
 
-    // Timeout de segurança
     setTimeout(() => {
       try { printWin.close(); } catch (e) { /* já fechou */ }
       resolve(false);
@@ -270,57 +288,66 @@ function registrarHandlersImpressao(ipcMain, db) {
   // Handler principal de impressão
   ipcMain.handle('impressao:imprimirCupom', async (_event, dados) => {
     try {
-      const banco = db ? db.obterDb() : null;
-      if (!banco) {
-        return { ok: false, erro: 'Banco de dados não disponível' };
+      let venda = null;
+      let itens = [];
+
+      // Tratamento para Teste de Impressão
+      if (dados.venda_id === -1 || dados.teste) {
+        venda = {
+          id: 'TESTE',
+          operador_nome: 'ADMIN',
+          forma_pagamento: 'DINHEIRO',
+          total: 10.00,
+          desconto: 0.00
+        };
+        itens = [
+          { produto_nome: 'PRODUTO TESTE', qtd: 1, peso_kg: 0, preco_unitario: 10.00, subtotal: 10.00 }
+        ];
+      } else {
+        const banco = db ? db.obterDb() : null;
+        if (!banco) {
+          return { ok: false, erro: 'Banco de dados não disponível' };
+        }
+
+        venda = banco.prepare(`
+          SELECT v.*, o.nome as operador_nome
+          FROM vendas v
+          LEFT JOIN operadores o ON v.operador_id = o.id
+          WHERE v.id = ?
+        `).get(dados.venda_id);
+
+        if (!venda) {
+          return { ok: false, erro: 'Venda não encontrada' };
+        }
+
+        itens = banco.prepare(`
+          SELECT vi.*, p.nome as produto_nome, p.tipo as produto_tipo
+          FROM venda_itens vi
+          LEFT JOIN produtos p ON vi.produto_id = p.id
+          WHERE vi.venda_id = ?
+        `).all(dados.venda_id);
       }
-
-      // Busca dados da venda
-      const venda = banco.prepare(`
-        SELECT v.*, o.nome as operador_nome
-        FROM vendas v
-        LEFT JOIN operadores o ON v.operador_id = o.id
-        WHERE v.id = ?
-      `).get(dados.venda_id);
-
-      if (!venda) {
-        return { ok: false, erro: 'Venda não encontrada' };
-      }
-
-      const itens = banco.prepare(`
-        SELECT vi.*, p.nome as produto_nome, p.tipo as produto_tipo
-        FROM venda_itens vi
-        LEFT JOIN produtos p ON vi.produto_id = p.id
-        WHERE vi.venda_id = ?
-      `).all(dados.venda_id);
 
       const nomeMercado = dados.nome_mercado || 'MERCADO PDV';
       const nomeImpressora = dados.nome_impressora || '';
 
-      // Estratégia 1: Tenta USB direto (escpos-usb)
+      // Estratégia 1: USB direto
       console.log('[Impressão] Tentando via USB (escpos-usb)...');
       const resultadoUSB = await imprimirViaUSB(venda, itens, nomeMercado);
-
       if (resultadoUSB.ok) {
-        console.log('[Impressão] Sucesso via USB!');
         return resultadoUSB;
       }
 
-      console.log(`[Impressão] USB falhou: ${resultadoUSB.erro}`);
-      console.log('[Impressão] Tentando via driver/spooler do Windows...');
-
-      // Estratégia 2: Tenta via driver Windows (webContents.print)
+      // Estratégia 2: Driver / Spooler do Windows
+      console.log('[Impressão] USB falhou. Tentando via driver Windows...');
       const resultadoWin = await imprimirViaWindows(venda, itens, nomeMercado, nomeImpressora);
-
       if (resultadoWin.ok) {
-        console.log(`[Impressão] Sucesso via Windows! Impressora: ${resultadoWin.impressora}`);
         return resultadoWin;
       }
 
-      console.warn('[Impressão] Todas as tentativas falharam.');
       return {
         ok: false,
-        erro: resultadoWin.erro || resultadoUSB.erro || 'Não foi possível se comunicar com a impressora Elgin i8'
+        erro: resultadoWin.erro || 'Falha ao comunicar com impressora Elgin i8'
       };
 
     } catch (err) {
@@ -332,13 +359,11 @@ function registrarHandlersImpressao(ipcMain, db) {
   // Handler para listar impressoras do Windows (para configurações)
   ipcMain.handle('impressao:listarImpressoras', async () => {
     try {
-      const win = BrowserWindow.getAllWindows()[0];
-      if (!win) return [];
-      const printers = win.webContents.getPrinters();
-      return printers.map(p => ({
+      const list = await obterImpressorasWindows();
+      return list.map(p => ({
         nome: p.name,
-        padrao: p.isDefault,
-        status: p.status === 0 ? 'Pronta' : 'Offline'
+        padrao: Boolean(p.isDefault),
+        status: 'Pronta'
       }));
     } catch (err) {
       console.warn('Erro ao listar impressoras:', err.message);
