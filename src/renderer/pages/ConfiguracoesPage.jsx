@@ -14,6 +14,9 @@ export default function ConfiguracoesPage() {
 
   const [nomeMercado, setNomeMercado] = useState('MERCADO PDV');
   const [usaBalanca, setUsaBalanca] = useState(false);
+  const [nomeImpressora, setNomeImpressora] = useState('');
+  const [impressoras, setImpressoras] = useState([]);
+  const [carregandoImpressoras, setCarregandoImpressoras] = useState(false);
 
   useEffect(() => {
     carregarDados();
@@ -39,6 +42,9 @@ export default function ConfiguracoesPage() {
       setPortas([]);
     }
     
+    // Carrega impressoras disponíveis
+    await carregarImpressoras();
+
     // Tenta carregar configs salvas no localStorage (simples)
     try {
       const saved = localStorage.getItem('config_hardware');
@@ -48,6 +54,7 @@ export default function ConfiguracoesPage() {
         const parsed = JSON.parse(saved);
         setConfig(parsed);
         setUsaBalanca(parsed.usaBalanca || false);
+        setNomeImpressora(parsed.nomeImpressora || '');
         if (parsed.usaBalanca && parsed.balancaPorta) {
           window.api.balanca.configurar({ path: parsed.balancaPorta, baudRate: parseInt(parsed.balancaBaud) });
         }
@@ -76,9 +83,41 @@ export default function ConfiguracoesPage() {
     }
   }
 
+  async function carregarImpressoras() {
+    setCarregandoImpressoras(true);
+    try {
+      const lista = await window.api.impressao.listarImpressoras();
+      setImpressoras(lista || []);
+    } catch (err) {
+      console.warn('Erro ao listar impressoras:', err);
+      setImpressoras([]);
+    }
+    setCarregandoImpressoras(false);
+  }
+
+  async function testarImpressao() {
+    try {
+      toast('Enviando teste de impressão...', 'info');
+      // Cria uma venda fictícia para teste
+      const resultado = await window.api.impressao.cupom({
+        venda_id: -1, // ID fictício - o handler vai tratar
+        nome_mercado: nomeMercado,
+        nome_impressora: nomeImpressora,
+        teste: true
+      });
+      if (resultado && resultado.ok) {
+        toast(`Impressão OK! Método: ${resultado.metodo || 'auto'} | Impressora: ${resultado.impressora || 'USB'}`, 'success');
+      } else {
+        toast(`Falha: ${resultado?.erro || 'Erro desconhecido'}`, 'error');
+      }
+    } catch (err) {
+      toast('Erro ao testar impressão: ' + err.message, 'error');
+    }
+  }
+
   async function salvar() {
     try {
-      const hardwareConfig = { ...config, usaBalanca };
+      const hardwareConfig = { ...config, usaBalanca, nomeImpressora };
       localStorage.setItem('config_hardware', JSON.stringify(hardwareConfig));
       localStorage.setItem('config_sistema', JSON.stringify({ nomeMercado }));
       
@@ -116,6 +155,41 @@ export default function ConfiguracoesPage() {
               placeholder="NOME DO SEU MERCADO"
             />
           </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ maxWidth: 900, marginBottom: 24 }}>
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 className="card-title">🖨️ Impressora Térmica</h3>
+          <button className="btn btn-sm btn-secondary" onClick={carregarImpressoras} disabled={carregandoImpressoras}>
+            {carregandoImpressoras ? '⏳ Buscando...' : '🔄 Redetectar'}
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="input-group">
+            <label>Impressora (deixe em branco para auto-detectar)</label>
+            <select
+              className="input"
+              value={nomeImpressora}
+              onChange={(e) => setNomeImpressora(e.target.value)}
+            >
+              <option value="">🔍 Auto-detectar (Elgin i8 / Padrão)</option>
+              {impressoras.map(imp => (
+                <option key={imp.nome} value={imp.nome}>
+                  {imp.nome} {imp.padrao ? '(Padrão)' : ''} — {imp.status}
+                </option>
+              ))}
+            </select>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              {impressoras.length === 0
+                ? '⚠️ Nenhuma impressora detectada. Verifique se o serviço "Spooler de Impressão" está ativo.'
+                : `${impressoras.length} impressora(s) encontrada(s). O sistema tenta USB direto primeiro, depois o driver Windows.`
+              }
+            </p>
+          </div>
+          <button className="btn btn-sm btn-secondary" style={{ marginTop: 8 }} onClick={testarImpressao}>
+            🧪 Testar Impressão
+          </button>
         </div>
       </div>
 

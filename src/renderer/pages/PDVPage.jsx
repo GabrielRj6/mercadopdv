@@ -266,11 +266,14 @@ export default function PDVPage(props) {
         
         try {
           const configSis = localStorage.getItem('config_sistema');
+          const configHw = localStorage.getItem('config_hardware');
           const nomeMercado = configSis ? JSON.parse(configSis).nomeMercado : 'MERCADO PDV';
-          
+          const nomeImpressora = configHw ? JSON.parse(configHw).nomeImpressora : '';
+
           await window.api.impressao.cupom({
             venda_id: resultado.id,
-            nome_mercado: nomeMercado
+            nome_mercado: nomeMercado,
+            nome_impressora: nomeImpressora
           });
         } catch (printErr) {
           console.warn('Erro ao imprimir cupom:', printErr);

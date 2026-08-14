@@ -38,9 +38,11 @@ function AppContent() {
   return (
     <div className="app-layout">
       <TitleBar />
-      {paginaAtual === 'pdv' ? (
+      {/* PDV fica sempre montado para preservar o carrinho */}
+      <div style={{ display: paginaAtual === 'pdv' ? 'contents' : 'none' }}>
         <PDVPage onNavegar={setPaginaAtual} />
-      ) : (
+      </div>
+      {paginaAtual !== 'pdv' && (
         <div className="app-content">
           <Sidebar paginaAtual={paginaAtual} onNavegar={setPaginaAtual} />
           {renderizarPagina()}

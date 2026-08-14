@@ -78,11 +78,14 @@ export default function VendasPage() {
   async function reimprimirCupom(id) {
     try {
       const configSis = localStorage.getItem('config_sistema');
+      const configHw = localStorage.getItem('config_hardware');
       const nomeMercado = configSis ? JSON.parse(configSis).nomeMercado : 'MERCADO PDV';
+      const nomeImpressora = configHw ? JSON.parse(configHw).nomeImpressora : '';
       
       const resultado = await window.api.impressao.cupom({
         venda_id: id,
-        nome_mercado: nomeMercado
+        nome_mercado: nomeMercado,
+        nome_impressora: nomeImpressora
       });
 
       if (resultado && resultado.ok) {

@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   impressao: {
     cupom: (dados) => ipcRenderer.invoke('impressao:imprimirCupom', dados),
+    listarImpressoras: () => ipcRenderer.invoke('impressao:listarImpressoras'),
   },
   balanca: {
     lerPeso: () => ipcRenderer.invoke('balanca:lerPeso'),
