@@ -86,10 +86,16 @@ function registrarTodosHandlers() {
     });
 
     autoUpdater.on('update-downloaded', () => {
-      if (mainWindow) mainWindow.webContents.send('updater:status', 'Atualização concluída. Reiniciando para instalar...');
+      if (mainWindow) mainWindow.webContents.send('updater:status', 'Atualização baixada! Reiniciando o sistema em 3 segundos...');
+      setTimeout(() => {
+        autoUpdater.quitAndInstall(false, true);
+      }, 3000);
     });
 
-    autoUpdater.on('error', (err) => console.error('Erro no updater:', err));
+    autoUpdater.on('error', (err) => {
+      console.error('Erro no updater:', err);
+      if (mainWindow) mainWindow.webContents.send('updater:status', 'Erro ao atualizar: ' + (err.message || 'Falha no download'));
+    });
 
   } catch (err) {
     console.error("Erro ao registrar handlers:", err);
