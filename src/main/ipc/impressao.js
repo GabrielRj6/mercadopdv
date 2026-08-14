@@ -297,8 +297,8 @@ function registrarHandlersImpressao(ipcMain, db) {
       const nomeMercado = dados.nome_mercado || 'MERCADO PDV';
       const nomeImpressora = dados.nome_impressora || '';
 
-      // Estratégia: Tenta USB direto → Fallback para impressão Windows
-      console.log('[Impressão] Tentando via USB (libusb)...');
+      // Estratégia 1: Tenta USB direto (escpos-usb)
+      console.log('[Impressão] Tentando via USB (escpos-usb)...');
       const resultadoUSB = await imprimirViaUSB(venda, itens, nomeMercado);
 
       if (resultadoUSB.ok) {
@@ -307,8 +307,9 @@ function registrarHandlersImpressao(ipcMain, db) {
       }
 
       console.log(`[Impressão] USB falhou: ${resultadoUSB.erro}`);
-      console.log('[Impressão] Tentando via driver Windows...');
+      console.log('[Impressão] Tentando via driver/spooler do Windows...');
 
+      // Estratégia 2: Tenta via driver Windows (webContents.print)
       const resultadoWin = await imprimirViaWindows(venda, itens, nomeMercado, nomeImpressora);
 
       if (resultadoWin.ok) {
@@ -319,8 +320,7 @@ function registrarHandlersImpressao(ipcMain, db) {
       console.warn('[Impressão] Todas as tentativas falharam.');
       return {
         ok: false,
-        erro: `Impressora não encontrada. Tentativas: USB (${resultadoUSB.erro}) | Windows (${resultadoWin.erro})`,
-        impressoras: resultadoWin.impressoras || []
+        erro: resultadoWin.erro || resultadoUSB.erro || 'Não foi possível se comunicar com a impressora Elgin i8'
       };
 
     } catch (err) {
