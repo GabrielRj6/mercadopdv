@@ -263,6 +263,10 @@ export default function PDVPage(props) {
       return;
     }
 
+    if (mistoFormaAtual === 'conta' && !clienteSelecionado) {
+      buscarClientes('');
+    }
+
     setPagamentosMisto(prev => [...prev, { forma: mistoFormaAtual, valor }]);
     setMistoValorAtual('');
     setMistoFormaAtual('dinheiro');
@@ -337,6 +341,10 @@ export default function PDVPage(props) {
         toast('Pagamento misto precisa de pelo menos 2 formas', 'error');
         return;
       }
+      if (pagamentosMisto.some(p => p.forma === 'conta') && !clienteSelecionado) {
+        toast('Selecione o cliente para lançar a parcela na conta', 'error');
+        return;
+      }
     }
 
     try {
@@ -350,12 +358,15 @@ export default function PDVPage(props) {
       return;
     }
 
+    const temContaNoMisto = formaPagamento === 'misto' && pagamentosMisto.some(p => p.forma === 'conta');
+    const clienteIdFinal = (formaPagamento === 'conta' || temContaNoMisto) ? clienteSelecionado?.id : null;
+
     const venda = {
       operador_id: operador?.id || 1,
       total: calcularTotal(),
       desconto: desconto,
       forma_pagamento: formaPagamento,
-      cliente_id: formaPagamento === 'conta' ? clienteSelecionado.id : null,
+      cliente_id: clienteIdFinal,
       pagamentos: formaPagamento === 'misto' ? pagamentosMisto : [],
       itens: carrinho.map(i => ({
         produto_id: i.produto_id,
@@ -430,18 +441,24 @@ export default function PDVPage(props) {
       return !!clienteSelecionado;
     }
     if (formaPagamento === 'misto') {
-      return pagamentosMisto.length >= 2 && restanteMisto() < 0.01;
+      const mistoValido = pagamentosMisto.length >= 2 && restanteMisto() < 0.01;
+      const temConta = pagamentosMisto.some(p => p.forma === 'conta');
+      if (temConta) {
+        return mistoValido && !!clienteSelecionado;
+      }
+      return mistoValido;
     }
     // pix, debito, credito - sempre pode
     return true;
   }
 
-  // Formas disponíveis para pagamento misto (exclui 'conta' e 'misto')
+  // Formas disponíveis para pagamento misto
   const formasMistoDisponiveis = [
     { id: 'dinheiro', icone: '💵', label: 'Dinheiro' },
     { id: 'pix', icone: '📱', label: 'PIX' },
     { id: 'debito', icone: '💳', label: 'Débito' },
     { id: 'credito', icone: '💳', label: 'Crédito' },
+    { id: 'conta', icone: '📒', label: 'Conta (Fiado)' },
   ];
 
   return (
@@ -951,6 +968,61 @@ export default function PDVPage(props) {
                     >
                       + Adicionar
                     </button>
+                  </div>
+                )}
+
+                {/* Se houver 'conta' nos pagamentos mistos ou selecionada atualmente, mostra a seleção de cliente */}
+                {(pagamentosMisto.some(p => p.forma === 'conta') || mistoFormaAtual === 'conta') && (
+                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px dashed var(--border-color)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--accent-warning)' }}>
+                      📒 Vínculo de Cliente (Parcela na Conta)
+                    </div>
+                    {clienteSelecionado ? (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: 10,
+                        borderRadius: 8, background: 'rgba(0, 184, 148, 0.08)', border: '1px solid rgba(0, 184, 148, 0.25)'
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>{clienteSelecionado.nome}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                            {clienteSelecionado.telefone || clienteSelecionado.cpf || 'Cliente selecionado'}
+                          </div>
+                        </div>
+                        <button className="btn btn-sm btn-secondary" onClick={() => setClienteSelecionado(null)}>Trocar</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type="text"
+                          className="input"
+                          placeholder="Buscar cliente para pendurar parcela..."
+                          value={buscaCliente}
+                          onChange={(e) => {
+                            setBuscaCliente(e.target.value);
+                            buscarClientes(e.target.value);
+                          }}
+                          style={{ marginBottom: 6 }}
+                        />
+                        {clientes.length > 0 && (
+                          <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {clientes.map(c => (
+                              <div
+                                key={c.id}
+                                onClick={() => setClienteSelecionado(c)}
+                                style={{
+                                  padding: '6px 10px', borderRadius: 6, cursor: 'pointer',
+                                  background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                                  fontSize: 12, display: 'flex', justifyContent: 'space-between'
+                                }}
+                              >
+                                <span>{c.nome}</span>
+                                <span style={{ color: 'var(--text-secondary)' }}>{c.telefone || ''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

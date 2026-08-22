@@ -51,12 +51,23 @@ function registrarHandlersVendas(ipcMain, db) {
           }
         }
 
-        // Se for venda fiado (conta), registrar débito na conta do cliente
+        // Se for venda fiado (conta 100%), registrar débito do total
         if (v.forma_pagamento === 'conta' && v.cliente_id) {
           banco.prepare(`
             INSERT INTO cliente_contas (cliente_id, tipo, valor, descricao, operador_id)
             VALUES (?, 'debito', ?, ?, ?)
           `).run(v.cliente_id, v.total, `Venda #${vendaId} - Compra na conta`, v.operador_id);
+        }
+
+        // Se for venda mista com parcela na conta, registrar débito da parcela
+        if (v.forma_pagamento === 'misto' && v.cliente_id && v.pagamentos) {
+          const pagConta = v.pagamentos.find(p => p.forma === 'conta');
+          if (pagConta && pagConta.valor > 0) {
+            banco.prepare(`
+              INSERT INTO cliente_contas (cliente_id, tipo, valor, descricao, operador_id)
+              VALUES (?, 'debito', ?, ?, ?)
+            `).run(v.cliente_id, pagConta.valor, `Venda #${vendaId} - Parcela na conta`, v.operador_id);
+          }
         }
 
         banco.prepare(`
@@ -172,12 +183,22 @@ function registrarHandlersVendas(ipcMain, db) {
 
         banco.prepare("UPDATE vendas SET status = 'cancelada' WHERE id = ?").run(vendaId);
 
-        // Se era venda fiado, reverter débito na conta do cliente
-        if (venda.forma_pagamento === 'conta' && venda.cliente_id) {
-          banco.prepare(`
-            INSERT INTO cliente_contas (cliente_id, tipo, valor, descricao, operador_id)
-            VALUES (?, 'pagamento', ?, ?, ?)
-          `).run(venda.cliente_id, venda.total, `Estorno Venda #${vendaId} (cancelada)`, venda.operador_id);
+        // Se era venda fiado (100% ou parcela), reverter débito na conta do cliente
+        if (venda.cliente_id) {
+          if (venda.forma_pagamento === 'conta') {
+            banco.prepare(`
+              INSERT INTO cliente_contas (cliente_id, tipo, valor, descricao, operador_id)
+              VALUES (?, 'pagamento', ?, ?, ?)
+            `).run(venda.cliente_id, venda.total, `Estorno Venda #${vendaId} (cancelada)`, venda.operador_id);
+          } else if (venda.forma_pagamento === 'misto') {
+            const pagConta = banco.prepare("SELECT valor FROM venda_pagamentos WHERE venda_id = ? AND forma = 'conta'").get(vendaId);
+            if (pagConta && pagConta.valor > 0) {
+              banco.prepare(`
+                INSERT INTO cliente_contas (cliente_id, tipo, valor, descricao, operador_id)
+                VALUES (?, 'pagamento', ?, ?, ?)
+              `).run(venda.cliente_id, pagConta.valor, `Estorno Parcela Venda #${vendaId} (cancelada)`, venda.operador_id);
+            }
+          }
         }
 
         banco.prepare(`
