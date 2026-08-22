@@ -45,6 +45,24 @@ function migrarSchema() {
   if (!nomesColunasItens.includes('status')) {
     db.exec("ALTER TABLE venda_itens ADD COLUMN status TEXT DEFAULT 'ativo'");
   }
+
+  // Migration v1.5.0: Adicionar cliente_id nas vendas (para vendas fiado/conta)
+  const colunasVendas = db.prepare("PRAGMA table_info(vendas)").all();
+  const nomesColunasVendas = colunasVendas.map(c => c.name);
+  if (!nomesColunasVendas.includes('cliente_id')) {
+    db.exec("ALTER TABLE vendas ADD COLUMN cliente_id INTEGER NULL REFERENCES clientes(id)");
+  }
+
+  // Migration v1.5.0: Tabela para pagamentos mistos (split payment)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS venda_pagamentos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venda_id INTEGER NOT NULL,
+      forma TEXT NOT NULL,
+      valor REAL NOT NULL,
+      FOREIGN KEY (venda_id) REFERENCES vendas(id)
+    )
+  `);
 }
 
 function criarTabelas() {
@@ -81,8 +99,10 @@ function criarTabelas() {
       total REAL NOT NULL,
       desconto REAL DEFAULT 0,
       forma_pagamento TEXT DEFAULT 'dinheiro',
+      cliente_id INTEGER NULL,
       status TEXT DEFAULT 'finalizada',
-      FOREIGN KEY (operador_id) REFERENCES operadores(id)
+      FOREIGN KEY (operador_id) REFERENCES operadores(id),
+      FOREIGN KEY (cliente_id) REFERENCES clientes(id)
     );
 
     CREATE TABLE IF NOT EXISTS venda_itens (
@@ -95,6 +115,14 @@ function criarTabelas() {
       subtotal REAL NOT NULL,
       FOREIGN KEY (venda_id) REFERENCES vendas(id),
       FOREIGN KEY (produto_id) REFERENCES produtos(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS venda_pagamentos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venda_id INTEGER NOT NULL,
+      forma TEXT NOT NULL,
+      valor REAL NOT NULL,
+      FOREIGN KEY (venda_id) REFERENCES vendas(id)
     );
 
     CREATE TABLE IF NOT EXISTS caixa_movimentos (

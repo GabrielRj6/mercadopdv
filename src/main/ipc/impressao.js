@@ -23,6 +23,19 @@ function formatarDataHora() {
   return new Date().toLocaleString('pt-BR');
 }
 
+// Helper para label da forma de pagamento
+function labelFormaPagamento(forma) {
+  const labels = {
+    'dinheiro': 'DINHEIRO',
+    'pix': 'PIX',
+    'debito': 'DÉBITO',
+    'credito': 'CRÉDITO',
+    'conta': 'CONTA (FIADO)',
+    'misto': 'MISTO'
+  };
+  return labels[forma] || (forma || 'N/A').toUpperCase();
+}
+
 // Helper para obter impressoras do Windows (Electron API + PowerShell fallback)
 async function obterImpressorasWindows() {
   // 1. Tenta API do Electron (getPrintersAsync / getPrinters)
@@ -91,7 +104,7 @@ function imprimirViaUSB(venda, itens, nomeMercado) {
               .align('lt').text(`Venda: #${venda.id}`)
               .text(`Data: ${formatarDataHora()}`)
               .text(`Operador: ${venda.operador_nome || 'N/A'}`)
-              .text(`Pagamento: ${venda.forma_pagamento || 'N/A'}`)
+              .text(`Pagamento: ${labelFormaPagamento(venda.forma_pagamento)}`)
               .text('--------------------------------')
               .tableCustom([
                 { text: 'Item', align: 'LEFT', width: 0.4 },
@@ -113,10 +126,29 @@ function imprimirViaUSB(venda, itens, nomeMercado) {
 
             printer
               .text('--------------------------------').align('rt')
-              .text(`Subtotal: ${formatarMoeda(venda.total + (venda.desconto || 0))}`)
-              .text(`Desconto: ${formatarMoeda(venda.desconto || 0)}`)
-              .style('b').size(1, 1).text(`TOTAL: ${formatarMoeda(venda.total)}`)
-              .size(0, 0).style('normal').align('ct')
+              .text(`Subtotal: ${formatarMoeda(venda.total + (venda.desconto || 0))}`);
+
+            if (venda.desconto > 0) {
+              printer.text(`Desconto: ${formatarMoeda(venda.desconto)}`);
+            }
+
+            printer.style('b').size(1, 1).text(`TOTAL: ${formatarMoeda(venda.total)}`)
+              .size(0, 0).style('normal');
+
+            // Detalhes do pagamento misto
+            if (venda.forma_pagamento === 'misto' && venda.pagamentos && venda.pagamentos.length > 0) {
+              printer.align('lt').text('--- FORMAS DE PAGAMENTO ---');
+              for (const pag of venda.pagamentos) {
+                printer.text(`  ${labelFormaPagamento(pag.forma)}: ${formatarMoeda(pag.valor)}`);
+              }
+            }
+
+            // Nome do cliente em vendas fiado
+            if (venda.forma_pagamento === 'conta' && venda.cliente_nome) {
+              printer.align('lt').text(`Cliente: ${venda.cliente_nome}`);
+            }
+
+            printer.align('ct')
               .text('--------------------------------').text('OBRIGADO PELA PREFERENCIA')
               .feed(3).cut();
 
@@ -170,7 +202,7 @@ function gerarHTMLCupom(venda, itens, nomeMercado, via) {
   <div>Venda: #${venda.id}</div>
   <div>Data: ${formatarDataHora()}</div>
   <div>Operador: ${venda.operador_nome || 'N/A'}</div>
-  <div>Pagamento: ${venda.forma_pagamento || 'N/A'}</div>
+  <div>Pagamento: ${labelFormaPagamento(venda.forma_pagamento)}</div>
   <div class="divider"></div>
   <table>
     <tr class="bold">
@@ -183,8 +215,17 @@ function gerarHTMLCupom(venda, itens, nomeMercado, via) {
   </table>
   <div class="divider"></div>
   <div class="right">Subtotal: ${formatarMoeda(venda.total + (venda.desconto || 0))}</div>
-  <div class="right">Desconto: ${formatarMoeda(venda.desconto || 0)}</div>
+  ${venda.desconto > 0 ? `<div class="right">Desconto: ${formatarMoeda(venda.desconto)}</div>` : ''}
   <div class="total-line">TOTAL: ${formatarMoeda(venda.total)}</div>
+  ${venda.forma_pagamento === 'misto' && venda.pagamentos && venda.pagamentos.length > 0 ? `
+    <div class="divider"></div>
+    <div class="bold" style="font-size:11px; margin-bottom:2px">FORMAS DE PAGAMENTO:</div>
+    ${venda.pagamentos.map(p => `<div style="font-size:11px">&nbsp;&nbsp;${labelFormaPagamento(p.forma)}: ${formatarMoeda(p.valor)}</div>`).join('')}
+  ` : ''}
+  ${venda.forma_pagamento === 'conta' && venda.cliente_nome ? `
+    <div class="divider"></div>
+    <div style="font-size:11px"><b>Cliente:</b> ${venda.cliente_nome}</div>
+  ` : ''}
   <div class="divider"></div>
   <div class="footer">OBRIGADO PELA PREFERENCIA</div>
   <div style="height: 20px"></div>
@@ -310,9 +351,10 @@ function registrarHandlersImpressao(ipcMain, db) {
         }
 
         venda = banco.prepare(`
-          SELECT v.*, o.nome as operador_nome
+          SELECT v.*, o.nome as operador_nome, c.nome as cliente_nome
           FROM vendas v
           LEFT JOIN operadores o ON v.operador_id = o.id
+          LEFT JOIN clientes c ON v.cliente_id = c.id
           WHERE v.id = ?
         `).get(dados.venda_id);
 
@@ -326,6 +368,13 @@ function registrarHandlersImpressao(ipcMain, db) {
           LEFT JOIN produtos p ON vi.produto_id = p.id
           WHERE vi.venda_id = ?
         `).all(dados.venda_id);
+
+        // Carregar pagamentos mistos se for venda mista
+        if (venda.forma_pagamento === 'misto') {
+          venda.pagamentos = banco.prepare(
+            'SELECT * FROM venda_pagamentos WHERE venda_id = ?'
+          ).all(dados.venda_id);
+        }
       }
 
       const nomeMercado = dados.nome_mercado || 'MERCADO PDV';

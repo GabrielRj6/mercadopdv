@@ -7,6 +7,15 @@ function formatarMoeda(valor) {
   return (valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+const FORMAS_PAGAMENTO = [
+  { id: 'dinheiro', icone: '💵', label: 'Dinheiro' },
+  { id: 'pix', icone: '📱', label: 'PIX' },
+  { id: 'debito', icone: '💳', label: 'Débito' },
+  { id: 'credito', icone: '💳', label: 'Crédito' },
+  { id: 'conta', icone: '📒', label: 'Conta' },
+  { id: 'misto', icone: '🔀', label: 'Misto' },
+];
+
 export default function PDVPage(props) {
   const { operador } = useAuth();
   const toast = useToast();
@@ -26,6 +35,16 @@ export default function PDVPage(props) {
   const [produtosRapidos, setProdutosRapidos] = useState([]);
   const [buscaTexto, setBuscaTexto] = useState('');
   const [modalEditarItem, setModalEditarItem] = useState(null);
+
+  // === Estado para Pagamento na Conta (Fiado) ===
+  const [clientes, setClientes] = useState([]);
+  const [clienteSelecionado, setClienteSelecionado] = useState(null);
+  const [buscaCliente, setBuscaCliente] = useState('');
+
+  // === Estado para Pagamento Misto ===
+  const [pagamentosMisto, setPagamentosMisto] = useState([]);
+  const [mistoFormaAtual, setMistoFormaAtual] = useState('dinheiro');
+  const [mistoValorAtual, setMistoValorAtual] = useState('');
 
   useEffect(() => {
     carregarProdutosRapidos();
@@ -216,6 +235,52 @@ export default function PDVPage(props) {
     return carrinho.reduce((acc, item) => acc + item.subtotal, 0);
   }
 
+  // === Funções para Conta (Fiado) ===
+  async function buscarClientes(busca) {
+    try {
+      const lista = await window.api.clientes.listar({ busca: busca || '' });
+      setClientes(lista || []);
+    } catch (err) {
+      console.error('Erro ao buscar clientes:', err);
+      setClientes([]);
+    }
+  }
+
+  // === Funções para Pagamento Misto ===
+  function adicionarPagamentoMisto() {
+    const valor = parseFloat(mistoValorAtual);
+    if (!valor || valor <= 0) {
+      toast('Informe um valor válido', 'warning');
+      return;
+    }
+
+    const totalJaAlocado = pagamentosMisto.reduce((acc, p) => acc + p.valor, 0);
+    const totalVenda = calcularTotal();
+    const restante = totalVenda - totalJaAlocado;
+
+    if (valor > restante + 0.01) {
+      toast(`Valor excede o restante (${formatarMoeda(restante)})`, 'warning');
+      return;
+    }
+
+    setPagamentosMisto(prev => [...prev, { forma: mistoFormaAtual, valor }]);
+    setMistoValorAtual('');
+    setMistoFormaAtual('dinheiro');
+  }
+
+  function removerPagamentoMisto(index) {
+    setPagamentosMisto(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function totalMistoAlocado() {
+    return pagamentosMisto.reduce((acc, p) => acc + p.valor, 0);
+  }
+
+  function restanteMisto() {
+    return Math.max(0, calcularTotal() - totalMistoAlocado());
+  }
+
+  // === Abrir Modal de Pagamento ===
   function abrirPagamento() {
     if (carrinho.length === 0) {
       toast('Carrinho vazio', 'warning');
@@ -224,13 +289,54 @@ export default function PDVPage(props) {
     setFormaPagamento('dinheiro');
     setValorRecebido('');
     setParcelas(1);
+    setClienteSelecionado(null);
+    setBuscaCliente('');
+    setClientes([]);
+    setPagamentosMisto([]);
+    setMistoFormaAtual('dinheiro');
+    setMistoValorAtual('');
     setModalPagamento(true);
   }
 
+  // === Ao trocar forma de pagamento ===
+  function trocarFormaPagamento(novaForma) {
+    setFormaPagamento(novaForma);
+    setValorRecebido('');
+    setParcelas(1);
+    setClienteSelecionado(null);
+    setBuscaCliente('');
+    setPagamentosMisto([]);
+    setMistoFormaAtual('dinheiro');
+    setMistoValorAtual('');
+
+    if (novaForma === 'conta') {
+      buscarClientes('');
+    }
+  }
+
+  // === Finalizar Venda ===
   async function finalizarVenda() {
     if (carrinho.length === 0) {
       toast('Carrinho vazio', 'error');
       return;
+    }
+
+    // Validações específicas por forma de pagamento
+    if (formaPagamento === 'conta' && !clienteSelecionado) {
+      toast('Selecione o cliente para colocar na conta', 'error');
+      return;
+    }
+
+    if (formaPagamento === 'misto') {
+      const falta = restanteMisto();
+      if (falta > 0.01) {
+        toast(`Falta alocar ${formatarMoeda(falta)} nas formas de pagamento`, 'error');
+        return;
+      }
+      if (pagamentosMisto.length < 2) {
+        toast('Pagamento misto precisa de pelo menos 2 formas', 'error');
+        return;
+      }
     }
 
     try {
@@ -249,6 +355,8 @@ export default function PDVPage(props) {
       total: calcularTotal(),
       desconto: desconto,
       forma_pagamento: formaPagamento,
+      cliente_id: formaPagamento === 'conta' ? clienteSelecionado.id : null,
+      pagamentos: formaPagamento === 'misto' ? pagamentosMisto : [],
       itens: carrinho.map(i => ({
         produto_id: i.produto_id,
         qtd: i.qtd || 0,
@@ -262,7 +370,10 @@ export default function PDVPage(props) {
       const resultado = await window.api.vendas.registrar(venda);
       
       if (resultado && resultado.ok) {
-        toast('Venda finalizada com sucesso!', 'success');
+        const mensagemSucesso = formaPagamento === 'conta' 
+          ? `Venda registrada na conta de ${clienteSelecionado.nome}!` 
+          : 'Venda finalizada com sucesso!';
+        toast(mensagemSucesso, 'success');
         
         try {
           const configSis = localStorage.getItem('config_sistema');
@@ -285,6 +396,8 @@ export default function PDVPage(props) {
         setFormaPagamento('dinheiro');
         setValorRecebido('');
         setParcelas(1);
+        setClienteSelecionado(null);
+        setPagamentosMisto([]);
         carregarProdutosRapidos();
         focarInput();
       } else {
@@ -307,6 +420,29 @@ export default function PDVPage(props) {
       toast('Erro ao buscar produtos', 'error');
     }
   }
+
+  // === Verificar se o botão finalizar deve estar habilitado ===
+  function podeFinalizarVenda() {
+    if (formaPagamento === 'dinheiro') {
+      return valorRecebido && parseFloat(valorRecebido) >= calcularTotal();
+    }
+    if (formaPagamento === 'conta') {
+      return !!clienteSelecionado;
+    }
+    if (formaPagamento === 'misto') {
+      return pagamentosMisto.length >= 2 && restanteMisto() < 0.01;
+    }
+    // pix, debito, credito - sempre pode
+    return true;
+  }
+
+  // Formas disponíveis para pagamento misto (exclui 'conta' e 'misto')
+  const formasMistoDisponiveis = [
+    { id: 'dinheiro', icone: '💵', label: 'Dinheiro' },
+    { id: 'pix', icone: '📱', label: 'PIX' },
+    { id: 'debito', icone: '💳', label: 'Débito' },
+    { id: 'credito', icone: '💳', label: 'Crédito' },
+  ];
 
   return (
     <div className="pdv-layout">
@@ -472,6 +608,7 @@ export default function PDVPage(props) {
         </div>
       </div>
 
+      {/* ═══ Modal Peso ═══ */}
       {modalPeso && (
         <Modal titulo={`Peso - ${modalPeso.produto.nome}`} onFechar={() => { setModalPeso(null); focarInput(); }}>
           <div className="modal-body">
@@ -508,8 +645,9 @@ export default function PDVPage(props) {
         </Modal>
       )}
 
+      {/* ═══ Modal Pagamento ═══ */}
       {modalPagamento && (
-        <Modal titulo="Finalizar Venda" onFechar={() => setModalPagamento(false)} largura="500px">
+        <Modal titulo="Finalizar Venda" onFechar={() => setModalPagamento(false)} largura="580px">
           <div className="modal-body">
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Total a Pagar</div>
@@ -523,21 +661,14 @@ export default function PDVPage(props) {
               )}
             </div>
 
-            <div className="payment-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
-              {[
-                { id: 'dinheiro', icone: '💵', label: 'Dinheiro' },
-                { id: 'pix', icone: '📱', label: 'PIX' },
-                { id: 'debito', icone: '💳', label: 'Débito' },
-                { id: 'credito', icone: '💳', label: 'Crédito' },
-              ].map((forma) => (
+            {/* Seleção de Forma de Pagamento */}
+            <div className="payment-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+              {FORMAS_PAGAMENTO.map((forma) => (
                 <div
                   key={forma.id}
+                  id={`payment-option-${forma.id}`}
                   className={`payment-option ${formaPagamento === forma.id ? 'selected' : ''}`}
-                  onClick={() => {
-                    setFormaPagamento(forma.id);
-                    setValorRecebido('');
-                    setParcelas(1);
-                  }}
+                  onClick={() => trocarFormaPagamento(forma.id)}
                   style={{ 
                     padding: 12, 
                     borderRadius: 12, 
@@ -545,7 +676,8 @@ export default function PDVPage(props) {
                     textAlign: 'center',
                     cursor: 'pointer',
                     background: formaPagamento === forma.id ? 'var(--accent-primary-transparent, rgba(108, 92, 231, 0.1))' : 'transparent',
-                    borderColor: formaPagamento === forma.id ? 'var(--accent-primary)' : 'var(--border-color)'
+                    borderColor: formaPagamento === forma.id ? 'var(--accent-primary)' : 'var(--border-color)',
+                    transition: 'all 0.15s ease'
                   }}
                 >
                   <div style={{ fontSize: 24, marginBottom: 4 }}>{forma.icone}</div>
@@ -554,6 +686,7 @@ export default function PDVPage(props) {
               ))}
             </div>
 
+            {/* ═══ DINHEIRO ═══ */}
             {formaPagamento === 'dinheiro' && (
               <div className="card" style={{ padding: 15, background: 'var(--bg-secondary)' }}>
                 <div className="input-group">
@@ -579,6 +712,7 @@ export default function PDVPage(props) {
               </div>
             )}
 
+            {/* ═══ CRÉDITO ═══ */}
             {formaPagamento === 'credito' && (
               <div className="card" style={{ padding: 15, background: 'var(--bg-secondary)' }}>
                 <div className="input-group">
@@ -595,13 +729,263 @@ export default function PDVPage(props) {
                 </div>
               </div>
             )}
+
+            {/* ═══ CONTA (FIADO) ═══ */}
+            {formaPagamento === 'conta' && (
+              <div className="card" style={{ padding: 15, background: 'var(--bg-secondary)' }}>
+                <div className="input-group" style={{ marginBottom: 12 }}>
+                  <label>Buscar Cliente</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input 
+                      type="text" 
+                      className="input" 
+                      style={{ flex: 1 }}
+                      placeholder="Nome, telefone ou CPF..."
+                      value={buscaCliente}
+                      onChange={(e) => {
+                        setBuscaCliente(e.target.value);
+                        buscarClientes(e.target.value);
+                      }}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                {/* Cliente selecionado */}
+                {clienteSelecionado && (
+                  <div className="cliente-selecionado" style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: 12,
+                    borderRadius: 10,
+                    background: 'rgba(0, 184, 148, 0.08)',
+                    border: '1px solid rgba(0, 184, 148, 0.25)',
+                    marginBottom: 12,
+                    animation: 'slideUp 200ms ease'
+                  }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: '50%',
+                      background: 'linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'white', fontWeight: 700, fontSize: 16, flexShrink: 0
+                    }}>
+                      {clienteSelecionado.nome.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{clienteSelecionado.nome}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                        {clienteSelecionado.telefone || 'Sem telefone'} 
+                        {clienteSelecionado.saldo_devedor > 0 && (
+                          <span style={{ color: 'var(--accent-danger)', fontWeight: 600, marginLeft: 8 }}>
+                            Dívida: {formatarMoeda(clienteSelecionado.saldo_devedor)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button 
+                      className="btn btn-sm btn-secondary" 
+                      onClick={() => setClienteSelecionado(null)}
+                      style={{ flexShrink: 0 }}
+                    >
+                      Trocar
+                    </button>
+                  </div>
+                )}
+
+                {/* Lista de clientes */}
+                {!clienteSelecionado && (
+                  <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {clientes.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: 13 }}>
+                        {buscaCliente ? 'Nenhum cliente encontrado' : 'Digite para buscar clientes'}
+                      </div>
+                    ) : (
+                      clientes.map(c => (
+                        <div
+                          key={c.id}
+                          onClick={() => setClienteSelecionado(c)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: '10px 12px',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            border: '1px solid var(--border-color)',
+                            transition: 'all 0.15s ease',
+                            background: 'var(--bg-card)'
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.borderColor = 'var(--accent-primary)';
+                            e.currentTarget.style.background = 'var(--bg-card-hover)';
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.borderColor = 'var(--border-color)';
+                            e.currentTarget.style.background = 'var(--bg-card)';
+                          }}
+                        >
+                          <div style={{
+                            width: 32, height: 32, borderRadius: '50%',
+                            background: 'var(--accent-primary-transparent)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: 'var(--accent-primary)', fontWeight: 700, fontSize: 13, flexShrink: 0
+                          }}>
+                            {c.nome.charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.nome}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                              {c.telefone || c.cpf || 'Sem dados'}
+                            </div>
+                          </div>
+                          {c.saldo_devedor > 0 && (
+                            <div style={{ fontSize: 11, color: 'var(--accent-danger)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              {formatarMoeda(c.saldo_devedor)}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* Aviso visual */}
+                {clienteSelecionado && (
+                  <div className="alert-box warning" style={{ marginTop: 8, fontSize: 12 }}>
+                    ⚠️ Esta compra será adicionada à conta de <strong>{clienteSelecionado.nome}</strong>
+                    {clienteSelecionado.saldo_devedor > 0 && (
+                      <span>. Nova dívida total: <strong>{formatarMoeda(clienteSelecionado.saldo_devedor + calcularTotal())}</strong></span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ═══ MISTO (Pagamento Dividido) ═══ */}
+            {formaPagamento === 'misto' && (
+              <div className="card" style={{ padding: 15, background: 'var(--bg-secondary)' }}>
+                {/* Barra de progresso */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Alocado: {formatarMoeda(totalMistoAlocado())}</span>
+                    <span style={{ color: restanteMisto() < 0.01 ? 'var(--accent-success)' : 'var(--accent-warning)', fontWeight: 700 }}>
+                      {restanteMisto() < 0.01 ? '✓ Completo' : `Falta: ${formatarMoeda(restanteMisto())}`}
+                    </span>
+                  </div>
+                  <div style={{
+                    width: '100%', height: 6, borderRadius: 3,
+                    background: 'var(--border-color)', overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: `${Math.min(100, (totalMistoAlocado() / calcularTotal()) * 100)}%`,
+                      height: '100%', borderRadius: 3,
+                      background: restanteMisto() < 0.01
+                        ? 'linear-gradient(90deg, var(--accent-success), #00d2a0)'
+                        : 'linear-gradient(90deg, var(--accent-primary), var(--accent-secondary))',
+                      transition: 'width 0.3s ease'
+                    }}/>
+                  </div>
+                </div>
+
+                {/* Pagamentos já adicionados */}
+                {pagamentosMisto.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                    {pagamentosMisto.map((pag, idx) => {
+                      const formaInfo = formasMistoDisponiveis.find(f => f.id === pag.forma);
+                      return (
+                        <div key={idx} style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '8px 12px', borderRadius: 8,
+                          background: 'var(--bg-card)', border: '1px solid var(--border-color)'
+                        }}>
+                          <span style={{ fontSize: 18 }}>{formaInfo?.icone || '💰'}</span>
+                          <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{formaInfo?.label || pag.forma}</span>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent-secondary)' }}>{formatarMoeda(pag.valor)}</span>
+                          <button
+                            className="pdv-cart-item-remove"
+                            onClick={() => removerPagamentoMisto(idx)}
+                            title="Remover"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Adicionar novo pagamento (só se ainda falta alocar) */}
+                {restanteMisto() >= 0.01 && (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                    <div className="input-group" style={{ flex: 1 }}>
+                      <label>Forma</label>
+                      <select
+                        className="input"
+                        value={mistoFormaAtual}
+                        onChange={(e) => setMistoFormaAtual(e.target.value)}
+                      >
+                        {formasMistoDisponiveis.map(f => (
+                          <option key={f.id} value={f.id}>{f.icone} {f.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="input-group" style={{ flex: 1 }}>
+                      <label>Valor (R$)</label>
+                      <input
+                        type="number"
+                        className="input"
+                        value={mistoValorAtual}
+                        onChange={(e) => setMistoValorAtual(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && adicionarPagamentoMisto()}
+                        placeholder={formatarMoeda(restanteMisto()).replace('R$', '').trim()}
+                        step="0.01"
+                        min="0.01"
+                        autoFocus
+                      />
+                    </div>
+                    <button 
+                      className="btn btn-primary" 
+                      onClick={adicionarPagamentoMisto}
+                      style={{ height: 42, whiteSpace: 'nowrap' }}
+                    >
+                      + Adicionar
+                    </button>
+                  </div>
+                )}
+
+                {/* Botão rápido para alocar o restante */}
+                {restanteMisto() >= 0.01 && pagamentosMisto.length > 0 && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ width: '100%', marginTop: 10, fontSize: 12 }}
+                    onClick={() => {
+                      setMistoValorAtual(restanteMisto().toFixed(2));
+                    }}
+                  >
+                    Preencher restante ({formatarMoeda(restanteMisto())})
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* PIX / Débito - Sem campos extras */}
+            {(formaPagamento === 'pix' || formaPagamento === 'debito') && (
+              <div className="card" style={{ padding: 20, background: 'var(--bg-secondary)', textAlign: 'center' }}>
+                <div style={{ fontSize: 40, marginBottom: 8 }}>{formaPagamento === 'pix' ? '📱' : '💳'}</div>
+                <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                  {formaPagamento === 'pix' ? 'Confirme o recebimento do PIX e finalize' : 'Passe o cartão na maquininha e confirme'}
+                </div>
+              </div>
+            )}
           </div>
+
           <div className="modal-footer" style={{ marginTop: 10 }}>
             <button className="btn btn-secondary" onClick={() => setModalPagamento(false)}>Voltar</button>
             <button 
               className="btn btn-success btn-lg" 
               onClick={finalizarVenda}
-              disabled={formaPagamento === 'dinheiro' && (!valorRecebido || parseFloat(valorRecebido) < calcularTotal())}
+              disabled={!podeFinalizarVenda()}
               style={{ flex: 1 }}
             >
               ✓ Confirmar e Finalizar
@@ -610,6 +994,7 @@ export default function PDVPage(props) {
         </Modal>
       )}
 
+      {/* ═══ Modal Editar Item ═══ */}
       {modalEditarItem && (
         <Modal titulo={`Ajustar Preço - ${modalEditarItem.nome}`} onFechar={() => { setModalEditarItem(null); focarInput(); }}>
           <div className="modal-body">

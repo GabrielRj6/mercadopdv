@@ -5,9 +5,9 @@ function registrarHandlersVendas(ipcMain, db) {
 
       const inserirVenda = banco.transaction((v) => {
         const result = banco.prepare(`
-          INSERT INTO vendas (operador_id, total, desconto, forma_pagamento)
-          VALUES (?, ?, ?, ?)
-        `).run(v.operador_id, v.total, v.desconto || 0, v.forma_pagamento);
+          INSERT INTO vendas (operador_id, total, desconto, forma_pagamento, cliente_id)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(v.operador_id, v.total, v.desconto || 0, v.forma_pagamento, v.cliente_id || null);
 
         const vendaId = Number(result.lastInsertRowid);
 
@@ -40,6 +40,25 @@ function registrarHandlersVendas(ipcMain, db) {
           );
         }
 
+        // Registrar pagamentos mistos (split payment)
+        if (v.forma_pagamento === 'misto' && v.pagamentos && v.pagamentos.length > 0) {
+          const inserirPagamento = banco.prepare(`
+            INSERT INTO venda_pagamentos (venda_id, forma, valor)
+            VALUES (?, ?, ?)
+          `);
+          for (const pag of v.pagamentos) {
+            inserirPagamento.run(vendaId, pag.forma, pag.valor);
+          }
+        }
+
+        // Se for venda fiado (conta), registrar débito na conta do cliente
+        if (v.forma_pagamento === 'conta' && v.cliente_id) {
+          banco.prepare(`
+            INSERT INTO cliente_contas (cliente_id, tipo, valor, descricao, operador_id)
+            VALUES (?, 'debito', ?, ?, ?)
+          `).run(v.cliente_id, v.total, `Venda #${vendaId} - Compra na conta`, v.operador_id);
+        }
+
         banco.prepare(`
           INSERT INTO caixa_movimentos (tipo, valor, descricao, operador_id)
           VALUES ('venda', ?, ?, ?)
@@ -59,10 +78,11 @@ function registrarHandlersVendas(ipcMain, db) {
     try {
       const banco = db.obterDb();
       let sql = `
-        SELECT v.*, o.nome as operador_nome,
+        SELECT v.*, o.nome as operador_nome, c.nome as cliente_nome,
           (SELECT COUNT(*) FROM venda_itens WHERE venda_id = v.id) as total_itens
         FROM vendas v
         LEFT JOIN operadores o ON v.operador_id = o.id
+        LEFT JOIN clientes c ON v.cliente_id = c.id
         WHERE 1=1
       `;
       const params = [];
@@ -101,9 +121,10 @@ function registrarHandlersVendas(ipcMain, db) {
     try {
       const banco = db.obterDb();
       const venda = banco.prepare(`
-        SELECT v.*, o.nome as operador_nome
+        SELECT v.*, o.nome as operador_nome, c.nome as cliente_nome
         FROM vendas v
         LEFT JOIN operadores o ON v.operador_id = o.id
+        LEFT JOIN clientes c ON v.cliente_id = c.id
         WHERE v.id = ?
       `).get(id);
 
@@ -114,6 +135,11 @@ function registrarHandlersVendas(ipcMain, db) {
         FROM venda_itens vi
         LEFT JOIN produtos p ON vi.produto_id = p.id
         WHERE vi.venda_id = ?
+      `).all(id);
+
+      // Carregar pagamentos mistos se existirem
+      venda.pagamentos = banco.prepare(`
+        SELECT * FROM venda_pagamentos WHERE venda_id = ?
       `).all(id);
 
       return venda;
@@ -145,6 +171,14 @@ function registrarHandlersVendas(ipcMain, db) {
         banco.prepare("UPDATE venda_itens SET status = 'cancelado' WHERE venda_id = ? AND status = 'ativo'").run(vendaId);
 
         banco.prepare("UPDATE vendas SET status = 'cancelada' WHERE id = ?").run(vendaId);
+
+        // Se era venda fiado, reverter débito na conta do cliente
+        if (venda.forma_pagamento === 'conta' && venda.cliente_id) {
+          banco.prepare(`
+            INSERT INTO cliente_contas (cliente_id, tipo, valor, descricao, operador_id)
+            VALUES (?, 'pagamento', ?, ?, ?)
+          `).run(venda.cliente_id, venda.total, `Estorno Venda #${vendaId} (cancelada)`, venda.operador_id);
+        }
 
         banco.prepare(`
           INSERT INTO caixa_movimentos (tipo, valor, descricao, operador_id)
@@ -185,8 +219,7 @@ function registrarHandlersVendas(ipcMain, db) {
         const novoTotal = venda.total - item.subtotal;
         banco.prepare('UPDATE vendas SET total = ? WHERE id = ?').run(novoTotal, item.venda_id);
 
-        // Se todos os itens forem cancelados, a venda inteira deve ser cancelada?
-        // Vamos checar quantos itens ativos sobraram
+        // Se todos os itens forem cancelados, a venda inteira deve ser cancelada
         const ativos = banco.prepare("SELECT COUNT(*) as total FROM venda_itens WHERE venda_id = ? AND status = 'ativo'").get(item.venda_id);
         if (ativos.total === 0) {
           banco.prepare("UPDATE vendas SET status = 'cancelada' WHERE id = ?").run(item.venda_id);
